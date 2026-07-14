@@ -1,10 +1,10 @@
 #!/bin/sh
-# nudge installer (Linux/macOS) — usage:  curl -fsSL https://<release-url>/install.sh | sh
+# nudge installer (Linux/macOS) — usage:  curl -fsSL https://raw.githubusercontent.com/eduardsjermaks/nudge/main/install.sh | sh
 # Downloads the right binary into ~/.local/bin (or /usr/local/bin if writable).
 set -eu
 
-# Update this when releases are published.
-BASE_URL="${NUDGE_RELEASE_URL:-https://example.com/nudge/releases/latest}"
+# Override for testing against a different tag or release host.
+BASE_URL="${NUDGE_RELEASE_URL:-https://github.com/eduardsjermaks/nudge/releases/latest/download}"
 
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 case "$os" in

@@ -1,10 +1,10 @@
-# nudge installer (Windows) — usage:  irm https://<release-url>/install.ps1 | iex
+# nudge installer (Windows) — usage:  irm https://raw.githubusercontent.com/eduardsjermaks/nudge/main/install.ps1 | iex
 # Downloads the right binary into %LOCALAPPDATA%\Programs\nudge and adds it to the user PATH.
 $ErrorActionPreference = "Stop"
 
-# Update this when releases are published.
+# Override for testing against a different tag or release host.
 $baseUrl = $env:NUDGE_RELEASE_URL
-if (-not $baseUrl) { $baseUrl = "https://example.com/nudge/releases/latest" }
+if (-not $baseUrl) { $baseUrl = "https://github.com/eduardsjermaks/nudge/releases/latest/download" }
 
 $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") { "arm64" } else { "amd64" }
 $dest = Join-Path $env:LOCALAPPDATA "Programs\nudge"

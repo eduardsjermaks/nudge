@@ -33,15 +33,15 @@ your `PATH`, or:
 
 ```powershell
 # Windows (PowerShell)
-irm https://example.com/nudge/install.ps1 | iex
+irm https://raw.githubusercontent.com/eduardsjermaks/nudge/main/install.ps1 | iex
 ```
 ```bash
 # Linux / macOS
-curl -fsSL https://example.com/nudge/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/eduardsjermaks/nudge/main/install.sh | sh
 ```
 
-(Replace `example.com/nudge` with the real release URL once published. Building
-from source: `go build ./cmd/nudge` — no CGO, no exotic deps.)
+The install scripts download binaries from the latest GitHub release. Building
+from source: `go build ./cmd/nudge` — no CGO, no exotic deps.
 
 **2. Install a local model server** — [Ollama](https://ollama.com/download)
 is the default:
@@ -174,6 +174,25 @@ go test ./...                      # unit tests, no model needed
 NUDGE_EVAL=1 go test ./eval -v     # model eval (needs a local model)
 make build-all                     # cross-compile windows/linux/darwin × amd64/arm64
 ```
+
+## Releases
+
+1. Pick a version and update `VERSION` if you want a different default than the one in `Makefile`.
+2. Build release artifacts locally: `make build-all VERSION=v0.1.0`
+3. Create and push the tag: `git tag v0.1.0` and `git push origin v0.1.0`
+4. In GitHub, open the repository's Releases page, choose "Draft a new release", select tag `v0.1.0`, and use title `v0.1.0`.
+5. Upload every file from `dist/`:
+
+```text
+dist/nudge_windows_amd64.exe
+dist/nudge_windows_arm64.exe
+dist/nudge_linux_amd64
+dist/nudge_linux_arm64
+dist/nudge_darwin_amd64
+dist/nudge_darwin_arm64
+```
+
+6. Publish the release. After that, the install scripts will resolve `releases/latest/download/...` automatically.
 
 See `DESIGN.md` for the two-tier architecture, the no-configuration
 principle, safety validation, and shell-integration tradeoffs. Scoop and
