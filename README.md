@@ -175,13 +175,29 @@ NUDGE_EVAL=1 go test ./eval -v     # model eval (needs a local model)
 make build-all                     # cross-compile windows/linux/darwin × amd64/arm64
 ```
 
+On Windows, `make` is optional. The repo includes a PowerShell equivalent:
+
+```powershell
+.\build-release.ps1 -Version v0.1.0
+```
+
 ## Releases
 
-1. Pick a version and update `VERSION` if you want a different default than the one in `Makefile`.
-2. Build release artifacts locally: `make build-all VERSION=v0.1.0`
-3. Create and push the tag: `git tag v0.1.0` and `git push origin v0.1.0`
-4. In GitHub, open the repository's Releases page, choose "Draft a new release", select tag `v0.1.0`, and use title `v0.1.0`.
-5. Upload every file from `dist/`:
+1. Install Go and make sure `go` is on your `PATH`: https://go.dev/dl/
+2. Pick a version, for example `v0.1.0`.
+3. Build release artifacts locally:
+
+```bash
+make build-all VERSION=v0.1.0
+```
+
+```powershell
+.\build-release.ps1 -Version v0.1.0
+```
+
+4. Create and push the tag: `git tag v0.1.0` and `git push origin v0.1.0`
+5. In GitHub, open the repository's Releases page, choose "Draft a new release", select tag `v0.1.0`, and use title `v0.1.0`.
+6. Upload every file from `dist/`:
 
 ```text
 dist/nudge_windows_amd64.exe
@@ -192,7 +208,7 @@ dist/nudge_darwin_amd64
 dist/nudge_darwin_arm64
 ```
 
-6. Publish the release. After that, the install scripts will resolve `releases/latest/download/...` automatically.
+7. Publish the release. After that, the install scripts will resolve `releases/latest/download/...` automatically.
 
 See `DESIGN.md` for the two-tier architecture, the no-configuration
 principle, safety validation, and shell-integration tradeoffs. Scoop and
