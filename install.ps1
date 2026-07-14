@@ -1,0 +1,31 @@
+# nudge installer (Windows) — usage:  irm https://<release-url>/install.ps1 | iex
+# Downloads the right binary into %LOCALAPPDATA%\Programs\nudge and adds it to the user PATH.
+$ErrorActionPreference = "Stop"
+
+# Update this when releases are published.
+$baseUrl = $env:NUDGE_RELEASE_URL
+if (-not $baseUrl) { $baseUrl = "https://example.com/nudge/releases/latest" }
+
+$arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") { "arm64" } else { "amd64" }
+$dest = Join-Path $env:LOCALAPPDATA "Programs\nudge"
+New-Item -ItemType Directory -Force $dest | Out-Null
+$exe = Join-Path $dest "nudge.exe"
+
+Write-Host "downloading nudge ($arch)..."
+Invoke-WebRequest -UseBasicParsing "$baseUrl/nudge_windows_$arch.exe" -OutFile $exe
+
+# Add to user PATH if missing.
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+if ($userPath -notlike "*$dest*") {
+    [Environment]::SetEnvironmentVariable("Path", "$userPath;$dest", "User")
+    $env:Path = "$env:Path;$dest"
+    Write-Host "added $dest to your user PATH (new terminals will pick it up)"
+}
+
+Write-Host "nudge installed: $exe"
+Write-Host ""
+Write-Host "next steps:"
+Write-Host "  1. install Ollama:  winget install Ollama.Ollama"
+Write-Host "  2. pull the model:  ollama pull qwen2.5-coder:1.5b"
+Write-Host "  3. add to `$PROFILE:  Invoke-Expression (& nudge init pwsh | Out-String)"
+Write-Host "  4. verify:          nudge doctor"
