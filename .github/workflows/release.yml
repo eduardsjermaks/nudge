@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the tagged source
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build release binaries
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          version="${GITHUB_REF_NAME}"
+
+          GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${version}" -o dist/nudge_windows_amd64.exe ./cmd/nudge
+          GOOS=windows GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=${version}" -o dist/nudge_windows_arm64.exe ./cmd/nudge
+          GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${version}" -o dist/nudge_linux_amd64 ./cmd/nudge
+          GOOS=linux GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=${version}" -o dist/nudge_linux_arm64 ./cmd/nudge
+          GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags "-s -w -X main.version=${version}" -o dist/nudge_darwin_amd64 ./cmd/nudge
+          GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w -X main.version=${version}" -o dist/nudge_darwin_arm64 ./cmd/nudge
+
+      - name: Create GitHub release and upload binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes

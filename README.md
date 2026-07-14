@@ -183,32 +183,23 @@ On Windows, `make` is optional. The repo includes a PowerShell equivalent:
 
 ## Releases
 
-1. Install Go and make sure `go` is on your `PATH`: https://go.dev/dl/
-2. Pick a version, for example `v0.1.0`.
-3. Build release artifacts locally:
+Pushing a version tag automatically tests, cross-compiles all supported targets,
+creates a GitHub Release, and uploads the installer assets. The generated
+`dist/` directory deliberately stays out of Git.
 
-```bash
-make build-all VERSION=v0.1.0
-```
+1. Pick a version, for example `v0.1.0`.
+2. Commit and push the changes you want to release.
+3. Create and push the tag: `git tag v0.1.0` and `git push origin v0.1.0`
+4. Watch the **Release** workflow in the repository's Actions tab. When it
+  succeeds, the release and its six binary assets are published automatically.
 
-```powershell
-.\build-release.ps1 -Version v0.1.0
-```
+The workflow runs `go test ./...` before publishing. If the test or build step
+fails, no release is created. After a successful release, the install scripts
+resolve `releases/latest/download/...` automatically.
 
-4. Create and push the tag: `git tag v0.1.0` and `git push origin v0.1.0`
-5. In GitHub, open the repository's Releases page, choose "Draft a new release", select tag `v0.1.0`, and use title `v0.1.0`.
-6. Upload every file from `dist/`:
-
-```text
-dist/nudge_windows_amd64.exe
-dist/nudge_windows_arm64.exe
-dist/nudge_linux_amd64
-dist/nudge_linux_arm64
-dist/nudge_darwin_amd64
-dist/nudge_darwin_arm64
-```
-
-7. Publish the release. After that, the install scripts will resolve `releases/latest/download/...` automatically.
+For a local build without publishing, install Go from https://go.dev/dl/ and
+run `make build-all VERSION=v0.1.0` on Unix-like systems or
+`.\build-release.ps1 -Version v0.1.0` in PowerShell.
 
 See `DESIGN.md` for the two-tier architecture, the no-configuration
 principle, safety validation, and shell-integration tradeoffs. Scoop and
