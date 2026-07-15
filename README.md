@@ -22,11 +22,6 @@ PS> nudge undo the last commit but keep my changes
 Did you mean:
   → git reset --soft HEAD~1    (undo the last commit and retain the changes)
 Run it? [Enter = yes / n = no / e = edit]
-
-PS> nudge undo last commit
-Did you mean:
-  → git reset --soft HEAD~1    (undo the last commit, keep changes staged)
-Run it? [Enter = yes / n = no / e = edit]
 ```
 
 Bare `nudge` fixes the previous failed command when shell integration is
