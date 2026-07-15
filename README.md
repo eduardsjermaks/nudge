@@ -1,17 +1,39 @@
 # nudge
 
 Type the command you *meant*. A local LLM figures it out; you confirm; it runs.
-**Nothing ever leaves your machine** — unless you explicitly plug in a cloud
-provider instead (see [Choosing a brain](#choosing-a-brain)).
+Use the local LLM by default, or configure a cloud provider when that better
+fits your setup. See [Choosing a brain](#choosing-a-brain).
 
 ```
-PS> nudge dotnet create migrations
-`dotnet create migrations` isn't a valid command. Did you mean:
-  → dotnet ef migrations add <name>    (create a new EF Core migration)
-  value for <name>: AddOrders
-  will run: dotnet ef migrations add AddOrders
+PS> undo last commit
+`undo last commit` isn't a valid command. Did you mean:
+  → git reset --soft HEAD~1    (undo the last commit, keep changes staged)
+Run it? [Enter = yes / n = no / e = edit]
+
+PS> docker remove image alpine
+docker: 'remove' is not a docker command.
+
+PS> nudge
+`docker remove image alpine` isn't a valid command. Did you mean:
+  → docker rmi alpine    (remove the alpine image)
+Run it? [Enter = yes / n = no / e = edit]
+
+PS> nudge undo the last commit but keep my changes
+Did you mean:
+  → git reset --soft HEAD~1    (undo the last commit and retain the changes)
+Run it? [Enter = yes / n = no / e = edit]
+
+PS> nudge undo last commit
+Did you mean:
+  → git reset --soft HEAD~1    (undo the last commit, keep changes staged)
 Run it? [Enter = yes / n = no / e = edit]
 ```
+
+Bare `nudge` fixes the previous failed command when shell integration is
+enabled. Give it words after `nudge` when you want help turning an intent into
+a command. With shell integration enabled, entering an unknown command such as
+`undo last commit` starts nudge automatically. You can also explicitly type
+`nudge <your intent>` in any terminal.
 
 It fixes two kinds of mistakes:
 
