@@ -1,7 +1,8 @@
 # nudge
 
 Type the command you *meant*. A local LLM figures it out; you confirm; it runs.
-**Nothing ever leaves your machine.**
+**Nothing ever leaves your machine** — unless you explicitly plug in a cloud
+provider instead (see [Choosing a brain](#choosing-a-brain)).
 
 ```
 PS> nudge dotnet create migrations
@@ -49,6 +50,10 @@ is the default:
 ```
 ollama pull qwen2.5-coder:1.5b
 ```
+
+(Don't want a ~1 GB local model? A cloud provider with your own API key works
+too — see [Choosing a brain](#choosing-a-brain). Local stays the
+recommendation.)
 
 **3. Add one line to your shell profile** (optional but recommended — enables
 bare `nudge` / `fix` and automatic catch of misspelled binaries):
@@ -107,7 +112,80 @@ Destructive suggestions (`rm -rf`, `git reset --hard`, force-push, `prune`,
 `y` after a warning. Non-TTY output prints the suggestion and exits 3 without
 running anything. The executed command's exit code is propagated.
 
-`--explain` shows which tier answered and how long it took.
+`--explain` shows which tier answered, the provider and model, and how long
+it took.
+
+## Choosing a brain
+
+Tier 1 (typo fixes) never involves a model. For everything else, pick one
+provider — exactly one is active at a time, selected in the config:
+
+- **Local (default, recommended):** private, free per query, ~1 GB model
+  download, needs Ollama (or any OpenAI-compatible local server). Nothing
+  leaves your machine.
+- **Cloud (opt-in):** no local install or RAM cost, needs an API key,
+  **your queries leave your machine** and are subject to the provider's data
+  policy. Supported: OpenAI, Azure OpenAI, Anthropic (Claude), DeepSeek.
+
+There is **no fallback between them**: if your chosen provider is down, nudge
+degrades to Tier 1 — it never silently switches to a cloud key it happens to
+find in your environment.
+
+**Cost, honestly:** a suggestion is roughly 300–500 input + ~60 output
+tokens. On the cheap tiers (gpt-5-mini, deepseek-chat, claude-haiku) that is
+fractions of a cent per correction — and Tier-1 fixes cost nothing.
+
+### Per-provider setup
+
+**OpenAI** (default model `gpt-5-mini`):
+
+```toml
+provider = "openai"          # key from OPENAI_API_KEY
+```
+
+**Anthropic** (default model `claude-haiku-4-5`):
+
+```toml
+provider = "anthropic"       # key from ANTHROPIC_API_KEY
+```
+
+**DeepSeek** (default model `deepseek-chat`):
+
+```toml
+provider = "deepseek"        # key from DEEPSEEK_API_KEY
+```
+
+**Azure OpenAI** (no default possible — "model" is your deployment):
+
+```toml
+provider = "azure"           # key from AZURE_OPENAI_API_KEY
+azure_endpoint = "https://myresource.openai.azure.com"
+azure_deployment = "my-deploy"
+# azure_api_version = "2024-10-21"   # the default
+```
+
+**Custom** — anything OpenAI-compatible, local or not: LM Studio, llama.cpp
+server, vLLM, a gateway:
+
+```toml
+provider = "custom"
+endpoint = "http://localhost:1234"   # LM Studio default
+model    = "loaded-model-name"
+# key (optional) from NUDGE_API_KEY
+```
+
+After switching, run `nudge doctor` — it validates the key, the endpoint,
+and JSON output for the *active* provider, and measures warm latency.
+
+### Credentials
+
+Resolved in this order: the provider's standard env var
+(`OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
+`DEEPSEEK_API_KEY`, `NUDGE_API_KEY` for custom) → `api_key_env = "SOME_VAR"`
+in the config → plaintext `api_key` in the config file (allowed but
+discouraged — nudge warns once and tightens the file to 0600 on
+Linux/macOS). Keys never appear in logs, errors, `--explain` output, or the
+doctor report (it shows only "present, ends …xxxx").
 
 ## Configuration (infrastructure only — there is no matching config)
 
@@ -115,47 +193,56 @@ running anything. The executed command's exit code is propagated.
 elsewhere. Env vars in parentheses override the file:
 
 ```toml
-endpoint   = "http://localhost:11434"   # (NUDGE_ENDPOINT) must be loopback
-model      = "qwen2.5-coder:1.5b"       # (NUDGE_MODEL)
-backend    = "ollama"                    # (NUDGE_BACKEND) "ollama" | "openai"
-keep_alive = "10m"                       # (NUDGE_KEEP_ALIVE) how long the model stays warm
-timeout    = 30                          # (NUDGE_TIMEOUT) seconds
+provider   = "ollama"                    # (NUDGE_PROVIDER) ollama | openai | azure | anthropic | deepseek | custom
+endpoint   = "http://localhost:11434"   # (NUDGE_ENDPOINT) ollama/custom only; must be loopback
+model      = "qwen2.5-coder:1.5b"       # (NUDGE_MODEL) optional override of the provider default
+keep_alive = "10m"                       # (NUDGE_KEEP_ALIVE) how long the local model stays warm
+timeout    = 30                          # (NUDGE_TIMEOUT) seconds, local providers
+timeout_ms = 8000                        # (NUDGE_TIMEOUT_MS) overrides timeout; cloud default is 8000
 confidence = 0.6                         # (NUDGE_CONFIDENCE) below this = "best guess" label
-# allow_non_local = true                 # (NUDGE_ALLOW_NON_LOCAL) see privacy
+# api_key_env = "SOME_VAR"               # indirection: read the key from this env var
+# api_key = "..."                        # plaintext key — discouraged, see Credentials
+# allow_non_local = true                 # (NUDGE_ALLOW_NON_LOCAL) ollama/custom on another machine
 ```
 
-**Better quality:** `model = "qwen2.5-coder:3b"` (~2 GB) is noticeably
+**Better local quality:** `model = "qwen2.5-coder:3b"` (~2 GB) is noticeably
 smarter and the recommended upgrade if your machine keeps up.
 
-**Other backends:** anything OpenAI-compatible on localhost works — LM Studio,
-llama.cpp server, vLLM:
-
-```toml
-backend  = "openai"
-endpoint = "http://localhost:1234"   # LM Studio default
-model    = "loaded-model-name"
-```
-
-**Degraded mode:** if the model server is down, typo fixes (Tier 1) keep
-working and model queries fail with a one-line hint to run `nudge doctor`,
-which checks endpoint, model, JSON mode, and measures a warm-call latency.
+**Degraded mode:** if the active provider is unreachable, typo fixes
+(Tier 1) keep working and model queries fail with a one-line hint to run
+`nudge doctor`. This never triggers a switch to another provider.
 
 ## Privacy
 
-- **Nothing leaves your machine.** nudge talks only to a loopback address and
-  hard-fails on any non-local endpoint unless you explicitly set
-  `allow_non_local = true` (for e.g. a model box on your LAN — your call, your
-  data). There is no telemetry, no analytics, no update check, no cloud
-  fallback. The binary makes no network connection other than your model
-  server.
-- **What is sent to the local model, exactly:** your typed command (or intent
-  text), its exit code, your OS and shell name, and the *names* of project
-  marker files in the current directory (`Api.csproj`, `package.json`, …).
-  **Never file contents**, never environment variables, never directory
-  listings beyond those marker names.
+What leaves your machine depends entirely on which provider *you* configured:
+
+| Provider | What is sent | When |
+|---|---|---|
+| ollama (default), custom on localhost | nothing leaves the machine | — |
+| openai / azure / anthropic / deepseek | the Tier-2 query (below), secrets masked | only when Tier 1 has no answer |
+| custom with `allow_non_local` | the Tier-2 query, unmasked | only when Tier 1 has no answer |
+
+- **With the local default, nothing leaves your machine.** nudge talks only
+  to a loopback address and hard-fails on any non-local endpoint unless you
+  explicitly set `allow_non_local = true`. There is no telemetry, no
+  analytics, no update check, and **no cloud fallback**: an API key sitting
+  in your environment is never used unless you selected that provider.
+- **A Tier-2 query is, exactly:** your typed command (or intent text), its
+  exit code, your OS and shell name, and the *names* of project marker files
+  in the current directory (`Api.csproj`, `package.json`, …). **Never file
+  contents**, never environment variables, never directory listings beyond
+  those marker names. With a cloud provider this goes to that provider and
+  is subject to its data policy.
+- **Secret masking (cloud only):** before sending, nudge scans the input for
+  likely secrets — known key prefixes (`sk-…`, `ghp_…`, `AKIA…`, JWTs, …),
+  `Authorization: Bearer` values, password-looking `-p`/`--password`
+  arguments, and long high-entropy tokens. Each is replaced with a stable
+  placeholder (`«SECRET_1»`) before the request, and restored verbatim in
+  the returned command. Heuristic, not a guarantee — don't paste secrets
+  you can't afford to leak.
 - Tier 1 reads executable names from `PATH` and runs `tool --help` for a known
   set of CLIs to learn their subcommands; results are cached locally in your
-  user cache directory.
+  user cache directory. Tier 1 never makes a network call, on any provider.
 
 ## Uninstall
 

@@ -21,6 +21,7 @@ import (
 	"nudge/internal/config"
 	"nudge/internal/llm"
 	"nudge/internal/prompt"
+	"nudge/internal/provider"
 	"nudge/internal/suggest"
 )
 
@@ -47,11 +48,21 @@ func TestModelEval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("config: %v", err)
 	}
-	client := llm.New(cfg)
+	// NUDGE_PROVIDER / NUDGE_MODEL env overrides let this same case set
+	// score any configured backend, e.g. NUDGE_PROVIDER=openai.
+	prov, err := provider.Resolve(cfg)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	if err := prov.KeyError(); err != nil {
+		t.Skipf("provider %s: %v", prov.Name, err)
+	}
+	client := llm.New(cfg, prov)
 	ctx := context.Background()
 	if err := client.Ping(ctx); err != nil {
-		t.Skipf("model server not reachable at %s: %v", cfg.Endpoint, err)
+		t.Skipf("provider %s not reachable at %s: %v", prov.Name, prov.BaseURL, err)
 	}
+	fmt.Printf("\neval provider: %s, model: %s\n", prov.Name, prov.Model)
 
 	var cases []evalCase
 	if err := json.Unmarshal(casesJSON, &cases); err != nil {

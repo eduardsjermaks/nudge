@@ -1,7 +1,7 @@
-// Package llm talks to the local model server. Two wire formats behind one
-// interface: Ollama's native API (default — supports keep_alive and JSON
-// mode) and the OpenAI-compatible chat completions API (LM Studio,
-// llama.cpp server, vLLM, and Ollama itself all speak it).
+// Package llm talks to the model server of the active provider. Two wire
+// protocols cover every provider: OpenAI-compatible chat completions
+// (OpenAI, Azure, DeepSeek, custom local servers) and the Anthropic Messages
+// API. Ollama keeps its native API for keep_alive and JSON mode.
 package llm
 
 import (
@@ -11,28 +11,36 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"sync"
 	"time"
 
 	"nudge/internal/config"
+	"nudge/internal/provider"
 )
 
 // Client is the one interface the rest of nudge sees.
 type Client interface {
 	// Chat sends a system+user prompt and returns the raw model text.
 	Chat(ctx context.Context, system, user string) (string, error)
-	// Ping verifies the server is reachable (cheap, no generation).
+	// Ping verifies the server is reachable and, for cloud providers, that
+	// the credential is accepted (cheap, no generation).
 	Ping(ctx context.Context) error
 	// ModelAvailable reports whether the configured model is present, when
 	// the backend can tell; ok=false means "can't tell".
 	ModelAvailable(ctx context.Context) (available bool, ok bool)
 }
 
-func New(cfg config.Config) Client {
-	hc := &http.Client{Timeout: time.Duration(cfg.TimeoutSec) * time.Second}
-	if cfg.Backend == "openai" {
-		return &openaiClient{cfg: cfg, hc: hc}
+func New(cfg config.Config, prov *provider.Provider) Client {
+	hc := &http.Client{Timeout: prov.Timeout}
+	switch prov.Protocol {
+	case provider.ProtoAnthropic:
+		return &anthropicClient{prov: prov, hc: hc}
+	case provider.ProtoOpenAI:
+		return &openaiClient{prov: prov, hc: hc}
+	default:
+		return &ollamaClient{cfg: cfg, hc: hc}
 	}
-	return &ollamaClient{cfg: cfg, hc: hc}
 }
 
 // --- Ollama native ---
@@ -63,7 +71,7 @@ func (c *ollamaClient) Chat(ctx context.Context, system, user string) (string, e
 		} `json:"message"`
 		Error string `json:"error"`
 	}
-	if err := c.post(ctx, "/api/chat", body, &resp); err != nil {
+	if err := postJSON(ctx, c.hc, c.cfg.Endpoint+"/api/chat", nil, body, &resp); err != nil {
 		return "", err
 	}
 	if resp.Error != "" {
@@ -73,19 +81,7 @@ func (c *ollamaClient) Chat(ctx context.Context, system, user string) (string, e
 }
 
 func (c *ollamaClient) Ping(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.cfg.Endpoint+"/api/tags", nil)
-	if err != nil {
-		return err
-	}
-	resp, err := c.hc.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("model server returned HTTP %d", resp.StatusCode)
-	}
-	return nil
+	return pingGET(ctx, c.hc, c.cfg.Endpoint+"/api/tags", nil)
 }
 
 func (c *ollamaClient) ModelAvailable(ctx context.Context) (bool, bool) {
@@ -114,27 +110,30 @@ func (c *ollamaClient) ModelAvailable(ctx context.Context) (bool, bool) {
 	return false, true
 }
 
-func (c *ollamaClient) post(ctx context.Context, path string, body, out any) error {
-	return postJSON(ctx, c.hc, c.cfg.Endpoint+path, body, out)
-}
-
-// --- OpenAI-compatible ---
+// --- OpenAI-compatible (OpenAI, Azure, DeepSeek, custom) ---
 
 type openaiClient struct {
-	cfg config.Config
-	hc  *http.Client
+	prov *provider.Provider
+	hc   *http.Client
 }
 
 func (c *openaiClient) Chat(ctx context.Context, system, user string) (string, error) {
 	body := map[string]any{
-		"model": c.cfg.Model,
+		"model": c.prov.Model,
 		"messages": []map[string]string{
 			{"role": "system", "content": system},
 			{"role": "user", "content": user},
 		},
-		"temperature":     0,
-		"max_tokens":      300,
 		"response_format": map[string]string{"type": "json_object"},
+	}
+	// OpenAI's current models renamed the output cap and fix temperature at
+	// the default; the compatible servers (DeepSeek, LM Studio, llama.cpp,
+	// Azure classic API) still speak the original dialect.
+	if c.prov.Name == "openai" {
+		body["max_completion_tokens"] = 2000 // includes hidden reasoning tokens on gpt-5 models
+	} else {
+		body["max_tokens"] = 300
+		body["temperature"] = 0
 	}
 	var resp struct {
 		Choices []struct {
@@ -146,48 +145,142 @@ func (c *openaiClient) Chat(ctx context.Context, system, user string) (string, e
 			Message string `json:"message"`
 		} `json:"error"`
 	}
-	if err := postJSON(ctx, c.hc, c.cfg.Endpoint+"/v1/chat/completions", body, &resp); err != nil {
+	if err := postJSON(ctx, c.hc, c.prov.ChatURL(), c.prov.Headers(), body, &resp); err != nil {
 		return "", err
 	}
 	if resp.Error != nil {
-		return "", fmt.Errorf("model server: %s", resp.Error.Message)
+		return "", fmt.Errorf("%s: %s", c.prov.Name, resp.Error.Message)
 	}
 	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("model server returned no choices")
+		return "", fmt.Errorf("%s returned no choices", c.prov.Name)
 	}
 	return resp.Choices[0].Message.Content, nil
 }
 
 func (c *openaiClient) Ping(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.cfg.Endpoint+"/v1/models", nil)
+	url, ok := c.prov.PingURL()
+	if !ok {
+		return nil // no cheap probe (azure); doctor does a live call anyway
+	}
+	return pingGET(ctx, c.hc, url, c.prov.Headers())
+}
+
+func (c *openaiClient) ModelAvailable(ctx context.Context) (bool, bool) {
+	return false, false // servers list models inconsistently; doctor just tries a call
+}
+
+// --- Anthropic Messages API ---
+
+type anthropicClient struct {
+	prov *provider.Provider
+	hc   *http.Client
+}
+
+func (c *anthropicClient) Chat(ctx context.Context, system, user string) (string, error) {
+	// No native JSON mode and no prefill (assistant prefill is rejected by
+	// current Anthropic models): the system prompt demands bare JSON and the
+	// local validator in suggest.Parse stays the source of truth.
+	body := map[string]any{
+		"model":       c.prov.Model,
+		"max_tokens":  300,
+		"temperature": 0,
+		"system":      system,
+		"messages": []map[string]string{
+			{"role": "user", "content": user},
+		},
+	}
+	var buf bytes.Buffer
+	if err := postRaw(ctx, c.hc, c.prov.ChatURL(), c.prov.Headers(), body, &buf); err != nil {
+		return "", err
+	}
+	return parseAnthropic(buf.Bytes())
+}
+
+// parseAnthropic extracts the text answer (or the API error) from a
+// Messages API response body.
+func parseAnthropic(data []byte) (string, error) {
+	var resp struct {
+		Content []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		} `json:"content"`
+		Error *struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return "", fmt.Errorf("anthropic: invalid response: %v", err)
+	}
+	if resp.Error != nil {
+		return "", fmt.Errorf("anthropic: %s: %s", resp.Error.Type, resp.Error.Message)
+	}
+	for _, b := range resp.Content {
+		if b.Type == "text" && b.Text != "" {
+			return b.Text, nil
+		}
+	}
+	return "", fmt.Errorf("anthropic returned no text content")
+}
+
+func (c *anthropicClient) Ping(ctx context.Context) error {
+	url, _ := c.prov.PingURL()
+	return pingGET(ctx, c.hc, url, c.prov.Headers())
+}
+
+func (c *anthropicClient) ModelAvailable(ctx context.Context) (bool, bool) {
+	return false, false
+}
+
+// --- shared HTTP plumbing ---
+
+func pingGET(ctx context.Context, hc *http.Client, url string, headers map[string]string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
 	}
-	resp, err := c.hc.Do(req)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	resp, err := hc.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode >= 500 {
+	switch {
+	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
+		return fmt.Errorf("authentication failed (HTTP %d)", resp.StatusCode)
+	case resp.StatusCode >= 500:
 		return fmt.Errorf("model server returned HTTP %d", resp.StatusCode)
 	}
 	return nil
 }
 
-func (c *openaiClient) ModelAvailable(ctx context.Context) (bool, bool) {
-	return false, false // generic servers list models inconsistently; doctor just tries a call
+func postJSON(ctx context.Context, hc *http.Client, url string, headers map[string]string, body, out any) error {
+	var buf bytes.Buffer
+	if err := postRaw(ctx, hc, url, headers, body, &buf); err != nil {
+		return err
+	}
+	return json.Unmarshal(buf.Bytes(), out)
 }
 
-func postJSON(ctx context.Context, hc *http.Client, url string, body, out any) error {
+// postRaw POSTs body as JSON and writes the raw response into out. Non-200
+// responses become errors that keep the HTTP status visible so callers can
+// tell auth failures from missing deployments.
+func postRaw(ctx context.Context, hc *http.Client, url string, headers map[string]string, body any, out *bytes.Buffer) error {
 	b, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
+	logHTTP(url, b)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 	resp, err := hc.Do(req)
 	if err != nil {
 		return err
@@ -204,5 +297,27 @@ func postJSON(ctx context.Context, hc *http.Client, url string, body, out any) e
 		}
 		return fmt.Errorf("model server HTTP %d: %s", resp.StatusCode, msg)
 	}
-	return json.Unmarshal(data, out)
+	out.Write(data)
+	return nil
+}
+
+var httpLogMu sync.Mutex
+
+// logHTTP appends the outgoing URL and request body to the file named by
+// NUDGE_HTTP_LOG. Debug aid: it proves what leaves the machine (masked
+// input) and what doesn't (tier-1 answers never log anything). Auth headers
+// are never written.
+func logHTTP(url string, body []byte) {
+	path := os.Getenv("NUDGE_HTTP_LOG")
+	if path == "" {
+		return
+	}
+	httpLogMu.Lock()
+	defer httpLogMu.Unlock()
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s POST %s %s\n", time.Now().Format(time.RFC3339), url, body)
 }

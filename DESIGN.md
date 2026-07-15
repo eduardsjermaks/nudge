@@ -46,13 +46,60 @@ Everything below the bar falls through to Tier 2. Intent phrases ("undo last
 commit") fall through by construction: their words aren't near-misses of
 anything real.
 
-**Tier 2 — local LLM.** The prompt contains exactly: OS + shell name, project
-marker file *names* from the cwd (`*.csproj`, `package.json`, `go.mod`, … —
-never file contents), the user's input, and in fix mode the exit code. The
-model must return strict JSON (`command`, `explanation`, `confidence`,
-`placeholders`, `destructive`, `shell_state`). Post-hoc *stderr* capture of the
-failed command is not portably possible without wrapping every process, so the
-model only gets the exit code — richer failure context is future work.
+**Tier 2 — the configured model provider.** The prompt contains exactly: OS +
+shell name, project marker file *names* from the cwd (`*.csproj`,
+`package.json`, `go.mod`, … — never file contents), the user's input, and in
+fix mode the exit code. The model must return strict JSON (`command`,
+`explanation`, `confidence`, `placeholders`, `destructive`, `shell_state`).
+Post-hoc *stderr* capture of the failed command is not portably possible
+without wrapping every process, so the model only gets the exit code — richer
+failure context is future work.
+
+## Providers: two wire protocols, one active provider
+
+Tier 2 defaults to a local Ollama model but can be pointed at a cloud
+provider (OpenAI, Azure OpenAI, Anthropic, DeepSeek) or any OpenAI-compatible
+server (`custom`). Two decisions shape the implementation:
+
+**Two wire protocols, not five clients.** OpenAI, Azure, DeepSeek, and
+`custom` all speak OpenAI-style chat completions; only auth style, base URL,
+and default model differ — those are data (`internal/provider` presets), not
+code. Anthropic's Messages API is the one genuinely different shape
+(`system` top-level, `x-api-key` + `anthropic-version` headers, content
+blocks) and gets its own client. Ollama keeps its native API for
+`keep_alive` and JSON mode. Wrinkle discovered by the live tests: openai.com's
+current models renamed `max_tokens` to `max_completion_tokens` and reject
+explicit `temperature`; the compatible servers still speak the classic
+dialect, so the OpenAI-protocol client switches dialect on the provider name.
+
+**No silent escalation to cloud — a hard rule.** Exactly one provider is
+active, selected in config. Nothing is ever sent to a cloud provider unless
+the user explicitly selected one: if the active provider is local and
+unreachable, nudge degrades to Tier 1 with a doctor hint, and an
+`OPENAI_API_KEY` sitting in the environment is never touched. This falls out
+of the structure (only the active provider's client is ever constructed) and
+is pinned by a test. No multi-provider fallback chains in this version.
+
+Provider JSON modes (OpenAI/DeepSeek `response_format`) are used where
+offered, but only as an optimization: the local validator in
+`suggest.Parse` plus one retry remains the only source of truth. Anthropic
+has no JSON mode here — the system prompt demands bare JSON, and assistant
+prefill (the classic trick) is not used because current Anthropic models
+reject it.
+
+**Secret masking (cloud only).** Before a query leaves the machine,
+`internal/mask` replaces likely secrets — known key prefixes, bearer tokens,
+password-flag values, high-entropy tokens — with stable `«SECRET_n»`
+placeholders, restored verbatim in the returned command. Detection errs
+toward masking: a masked commit SHA is restored verbatim and costs only
+context; a missed secret leaves the machine. Local providers skip the pass.
+
+**Credentials** resolve standard-env-var → `api_key_env` indirection →
+plaintext `api_key` (warned, file chmod 0600 on POSIX). Keys never appear in
+logs, errors, or doctor output. OS keychain integration is future work.
+
+`NUDGE_HTTP_LOG=<file>` appends every outgoing request URL + body (never
+headers) — the audit hook for "what actually left the machine".
 
 ## Model choice and prompt design
 
@@ -85,7 +132,8 @@ Anything that decides *what a command means* must come from either the machine
 
 - no rule/glob/synonym files, embedded or in a config dir;
 - the config file that does exist (`config.toml`) holds only infrastructure:
-  endpoint, model, backend, keep-alive, timeout, confidence threshold;
+  provider, endpoint, model, credentials, keep-alive, timeouts, confidence
+  threshold;
 - `eval/cases.json` is grading data for the test suite; the binary never
   reads it;
 - the destructive-pattern detector (below) is a fixed safety property of the
@@ -115,9 +163,11 @@ Model output is untrusted input:
    "best guess" label.
 4. **Nothing executes without confirmation**, and the executed command's exit
    code is propagated. Edited commands (`e`) are re-checked and re-confirmed.
-5. **Loopback enforcement:** the endpoint must resolve to loopback unless the
-   user explicitly sets `allow_non_local = true`. Nothing leaves the machine
-   by default, ever.
+5. **Loopback enforcement:** for the local providers (ollama, custom) the
+   endpoint must resolve to loopback unless the user explicitly sets
+   `allow_non_local = true`. Nothing leaves the machine by default, ever;
+   selecting a cloud provider in config is the one explicit opt-out (see
+   Providers above).
 
 **`shell_state` correction:** small models set `shell_state` unreliably (the
 1.5B model flagged `git push` as shell-state during development). The

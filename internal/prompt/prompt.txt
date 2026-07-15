@@ -13,6 +13,7 @@ Rules:
 - Match the OS/shell syntax. Use project files as context: .csproj/.sln = .NET (EF migrations: `dotnet ef migrations add`), package.json = npm, go.mod = Go, pyproject.toml = Python, pom.xml = Maven, build.gradle = Gradle.
 - When a command failed, stay with the program the user invoked: fix its spelling, subcommand, or flags. Never switch to a different tool. Only add flags or arguments the user implied.
 - If you cannot tell what was meant, return {"command": "", "confidence": 0}. Never invent a command or a flag that does not exist.
+- Tokens like «SECRET_1» are redacted values. Copy them into the command exactly as written; never replace them with a {placeholder} or invent their value.
 
 Examples:
 

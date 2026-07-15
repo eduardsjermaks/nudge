@@ -16,7 +16,9 @@ import (
 	"nudge/internal/doctor"
 	"nudge/internal/execx"
 	"nudge/internal/llm"
+	"nudge/internal/mask"
 	"nudge/internal/prompt"
+	"nudge/internal/provider"
 	"nudge/internal/safety"
 	"nudge/internal/shell"
 	"nudge/internal/suggest"
@@ -157,22 +159,38 @@ func correct(o opts, words []string) int {
 		return present(o, input, s, config.Defaults().Confidence, interactive)
 	}
 	if o.explain {
-		ui.Errf("%s\n", ui.Dim(fmt.Sprintf("[explain] tier 1: no confident match (%s), asking the local model", tier1Took.Round(time.Millisecond))))
+		ui.Errf("%s\n", ui.Dim(fmt.Sprintf("[explain] tier 1: no confident match (%s), asking the model", tier1Took.Round(time.Millisecond))))
 	}
 
-	// --- Tier 2: local LLM ---
+	// --- Tier 2: the configured model provider ---
 	cfg, err := config.Load()
 	if err != nil {
 		ui.Errf("nudge: %v\n", err)
 		return exitNoSuggestion
 	}
+	prov, err := provider.Resolve(cfg)
+	if err != nil {
+		ui.Errf("nudge: %v\n", err)
+		return exitNoSuggestion
+	}
+	if err := prov.KeyError(); err != nil {
+		ui.Errf("nudge: %v\n", err)
+		return exitNoSuggestion
+	}
 
-	client := llm.New(cfg)
+	client := llm.New(cfg, prov)
 	req := prompt.Request{
 		Input:    input,
 		FixMode:  o.fixMode,
 		ExitCode: o.lastExit,
 		Dir:      cwd(),
+	}
+	// Cloud providers get a masked copy of the input; the placeholders are
+	// swapped back after the model answers. Local providers see the input
+	// as-is.
+	var secrets map[string]string
+	if prov.Cloud {
+		req.Input, secrets = mask.Mask(input)
 	}
 
 	var sp *ui.Spinner
@@ -180,22 +198,30 @@ func correct(o opts, words []string) int {
 		sp = ui.StartSpinner("thinking...")
 	}
 	t0 = time.Now()
-	s, err = askModel(client, cfg, req)
+	s, err = askModel(client, prov.Timeout, req)
 	tier2Took := time.Since(t0)
 	if sp != nil {
 		sp.Stop()
 	}
 	if err != nil {
 		if isConnErr(err) {
-			ui.Errf("nudge: local model server unreachable at %s — typo fixes (tier 1) still work.\n", cfg.Endpoint)
+			if prov.Cloud {
+				ui.Errf("nudge: %s unreachable — check your network; typo fixes (tier 1) still work.\n", prov.Name)
+			} else {
+				ui.Errf("nudge: local model server unreachable at %s — typo fixes (tier 1) still work.\n", cfg.Endpoint)
+			}
 			ui.Errf("run %s to diagnose.\n", ui.Bold("nudge doctor"))
 		} else {
 			ui.Errf("nudge: %v\n", err)
 		}
 		return exitNoSuggestion
 	}
+	if len(secrets) > 0 {
+		s.Command = mask.Restore(s.Command, secrets)
+		s.Explanation = mask.Restore(s.Explanation, secrets)
+	}
 	if o.explain {
-		ui.Errf("%s\n", ui.Dim(fmt.Sprintf("[explain] tier 2 (%s) answered in %s, confidence %.2f", cfg.Model, tier2Took.Round(10*time.Millisecond), s.Confidence)))
+		ui.Errf("%s\n", ui.Dim(fmt.Sprintf("[explain] tier 2 (%s: %s) answered in %s, confidence %.2f", prov.Name, prov.Model, tier2Took.Round(10*time.Millisecond), s.Confidence)))
 	}
 	if s.Command == "" || s.Confidence == 0 {
 		ui.Errf("nudge: no suggestion — I can't tell what you meant by `%s`.\n", input)
@@ -205,8 +231,8 @@ func correct(o opts, words []string) int {
 }
 
 // askModel calls the model, validating hard; one retry on invalid JSON.
-func askModel(client llm.Client, cfg config.Config, req prompt.Request) (*suggest.Suggestion, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.TimeoutSec)*time.Second)
+func askModel(client llm.Client, timeout time.Duration, req prompt.Request) (*suggest.Suggestion, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	var lastErr error
 	for attempt := 0; attempt < 2; attempt++ {
@@ -346,13 +372,14 @@ func initHint() string {
 }
 
 func usage() {
-	fmt.Print(`nudge — proposes the command you meant, using a local LLM. Nothing leaves your machine.
+	fmt.Print(`nudge — proposes the command you meant, using a local LLM by default (nothing
+leaves your machine unless you configure a cloud provider).
 
 usage:
   nudge <failed command or plain words>   suggest a correction / a command
   nudge                                   fix the last command (needs shell integration)
   nudge init <bash|zsh|fish|powershell>   print the shell integration snippet
-  nudge doctor                            diagnose the local model setup
+  nudge doctor                            diagnose the active model provider
   nudge version                           print version
 
 flags:

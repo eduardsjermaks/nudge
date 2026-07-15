@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "PowerShell(go version *)"
+      "PowerShell(go version *)",
+      "Bash(./nudge.exe init *)",
+      "Skill(claude-api)"
     ]
   }
 }
