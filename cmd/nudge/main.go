@@ -382,6 +382,12 @@ usage:
   nudge doctor                            diagnose the active model provider
   nudge version                           print version
 
+Shell integration (enables bare nudge and fix; nudge must be on PATH):
+PowerShell: New-Item -ItemType File -Path $PROFILE -Force; Add-Content -Path $PROFILE -Value 'Invoke-Expression (& nudge init pwsh | Out-String)'; . $PROFILE
+bash:       Add: echo 'eval "$(nudge init bash)"' >> ~/.bashrc; then run: source ~/.bashrc
+zsh:        Add: echo 'eval "$(nudge init zsh)"' >> ~/.zshrc; then run: source ~/.zshrc
+fish:       mkdir -p ~/.config/fish; nudge init fish >> ~/.config/fish/config.fish; source ~/.config/fish/config.fish
+
 flags:
   --explain      show which tier answered and how long it took
   --last-exit N  exit code of the failed command (used by the shell wrapper)

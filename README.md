@@ -44,6 +44,36 @@ curl -fsSL https://raw.githubusercontent.com/eduardsjermaks/nudge/main/install.s
 The install scripts download binaries from the latest GitHub release. Building
 from source: `go build ./cmd/nudge` — no CGO, no exotic deps.
 
+### Windows PATH setup
+
+The PowerShell installer above adds its install directory to your user `PATH`
+automatically. Open a new PowerShell session and verify the command is
+available:
+
+```powershell
+Get-Command nudge
+```
+
+For a manually downloaded or locally built `nudge.exe`, copy it to a stable
+user directory and add that directory to your user `PATH`:
+
+```powershell
+$nudgeBin = Join-Path $env:LOCALAPPDATA 'Programs\nudge'
+New-Item -ItemType Directory -Path $nudgeBin -Force
+Copy-Item .\nudge.exe -Destination $nudgeBin -Force
+
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if ($userPath -notlike "*$nudgeBin*") {
+  [Environment]::SetEnvironmentVariable('Path', "$userPath;$nudgeBin", 'User')
+}
+```
+
+Open a new PowerShell session after changing `PATH`, then run:
+
+```powershell
+Get-Command nudge
+```
+
 **2. Install a local model server** — [Ollama](https://ollama.com/download)
 is the default:
 
@@ -55,15 +85,123 @@ ollama pull qwen2.5-coder:1.5b
 too — see [Choosing a brain](#choosing-a-brain). Local stays the
 recommendation.)
 
-**3. Add one line to your shell profile** (optional but recommended — enables
-bare `nudge` / `fix` and automatic catch of misspelled binaries):
+**3. Add the shell integration** (optional but recommended — enables bare
+`nudge` / `fix` and automatic catch of misspelled binaries). Choose your
+shell below. Each setup confirms that `nudge` is available, adds the generated
+integration, reloads the shell configuration, and verifies `fix`.
 
-| Shell | Add to | Line |
-|---|---|---|
-| PowerShell | `$PROFILE` | `Invoke-Expression (& nudge init pwsh \| Out-String)` |
-| bash | `~/.bashrc` | `eval "$(nudge init bash)"` |
-| zsh | `~/.zshrc` | `eval "$(nudge init zsh)"` |
-| fish | `~/.config/fish/config.fish` | `nudge init fish \| source` |
+### PowerShell
+
+1. Confirm that `nudge` is on your `PATH`:
+
+   ```powershell
+   Get-Command nudge
+   ```
+
+2. Create your PowerShell profile if it does not already exist:
+
+  ```powershell
+  New-Item -ItemType File -Path $PROFILE -Force
+  ```
+
+3. Add this line to the profile:
+
+  ```powershell
+  Add-Content -Path $PROFILE -Value 'Invoke-Expression (& nudge init pwsh | Out-String)'
+  ```
+
+4. Reload the profile now, or open a new PowerShell session:
+
+  ```powershell
+  . $PROFILE
+  ```
+
+5. Verify that the `fix` alias is available:
+
+  ```powershell
+  Get-Command fix
+  ```
+
+After a command fails, type `fix` or bare `nudge` to suggest a correction.
+
+### bash
+
+1. Confirm that `nudge` is on your `PATH`:
+
+  ```bash
+  command -v nudge
+  ```
+
+2. Add the integration to `~/.bashrc`:
+
+  ```bash
+  echo 'eval "$(nudge init bash)"' >> ~/.bashrc
+  ```
+
+3. Reload the configuration:
+
+  ```bash
+  source ~/.bashrc
+  ```
+
+4. Verify the `fix` function:
+
+  ```bash
+  type fix
+  ```
+
+### zsh
+
+1. Confirm that `nudge` is on your `PATH`:
+
+  ```zsh
+  command -v nudge
+  ```
+
+2. Add the integration to `~/.zshrc`:
+
+  ```zsh
+  echo 'eval "$(nudge init zsh)"' >> ~/.zshrc
+  ```
+
+3. Reload the configuration:
+
+  ```zsh
+  source ~/.zshrc
+  ```
+
+4. Verify the `fix` function:
+
+  ```zsh
+  type fix
+  ```
+
+### fish
+
+1. Confirm that `nudge` is on your `PATH`:
+
+  ```fish
+  command -v nudge
+  ```
+
+2. Create the configuration directory if needed and add the integration:
+
+  ```fish
+  mkdir -p ~/.config/fish
+  nudge init fish >> ~/.config/fish/config.fish
+  ```
+
+3. Reload the configuration:
+
+  ```fish
+  source ~/.config/fish/config.fish
+  ```
+
+4. Verify the `fix` function:
+
+  ```fish
+  type -q fix
+  ```
 
 Check the setup: `nudge doctor`.
 
