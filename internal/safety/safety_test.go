@@ -75,33 +75,24 @@ func TestChangesShellState(t *testing.T) {
 		"$env:FOO = 'bar'",
 		"pushd /tmp",
 	}
-	knownExe := func(w string) bool {
-		switch w {
-		case "git", "dotnet", "docker":
-			return true
-		}
-		return false
-	}
 	for _, c := range stateful {
-		if !ChangesShellState(c, false, knownExe) {
+		if !ChangesShellState(c) {
 			t.Errorf("ChangesShellState(%q) should be true", c)
 		}
 	}
+	// The model's shell_state hint is deliberately ignored: a false positive
+	// blocks a confirmed command (observed with `mkdir test && git init` and
+	// `git push` from the 1.5B model). Only the deterministic detector rules.
 	stateless := []string{
 		"git push",
 		"dotnet build",
 		"docker ps",
+		"mkdir test && git init",
+		"mystery-tool xyz",
 	}
 	for _, c := range stateless {
-		if ChangesShellState(c, false, knownExe) {
+		if ChangesShellState(c) {
 			t.Errorf("ChangesShellState(%q) should be false", c)
 		}
-	}
-	// the model hint is only trusted when we have no local evidence
-	if !ChangesShellState("mystery-tool xyz", true, knownExe) {
-		t.Error("model shell_state hint should be honored for unknown commands")
-	}
-	if ChangesShellState("git push", true, knownExe) {
-		t.Error("model shell_state hint must not override a known executable")
 	}
 }

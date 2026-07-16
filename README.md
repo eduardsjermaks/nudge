@@ -344,13 +344,17 @@ nudge undo last commit        # describe what you want
 nudge docker remove image alpine
 ```
 
+With the shell integration installed, explicit invocations run through the
+wrapper too, so suggestions that change shell state (`cd`, activating a
+venv, `mkdir x && cd x && ...`) take effect in your shell. Without it,
+nudge runs suggestions in a child process and prints shell-state ones for
+you to run yourself.
+
 **Level 2 — bare `nudge` / `fix` (needs the init line):** after a command
 fails, just type `nudge` (or `fix`). The wrapper function reads your last
 command and its exit code from shell history and proposes the correction.
 This is the only way to catch mistakes like `dotnet create migrations`, where
-the binary exists but the invocation is wrong. Suggestions that change shell
-state (`cd`, activating a venv) work at this level, because the shell itself
-runs the confirmed command.
+the binary exists but the invocation is wrong.
 
 **Level 3 — automatic (needs the init line):** mistype a *binary name*
 (`gti status`) and the shell's command-not-found hook calls nudge for you.

@@ -36,12 +36,17 @@ func Init(shellName string) (string, error) {
 const bashSnippet = `# nudge shell integration (bash) — add to ~/.bashrc:  eval "$(nudge init bash)"
 nudge() {
   local __ec=$?
-  if [ $# -gt 0 ]; then
-    command nudge "$@"
-    return
-  fi
+  case "$1" in
+    init|doctor|setup|version|help|--version|-v|--help|-h)
+      command nudge "$@"
+      return ;;
+  esac
   local __out
-  __out=$(NUDGE_HISTORY="$(fc -ln -5 2>/dev/null)" command nudge --shell-eval --last-exit "$__ec")
+  if [ $# -gt 0 ]; then
+    __out=$(command nudge --shell-eval "$@")
+  else
+    __out=$(NUDGE_HISTORY="$(fc -ln -5 2>/dev/null)" command nudge --shell-eval --last-exit "$__ec")
+  fi
   if [ $? -eq 0 ] && [ -n "$__out" ]; then
     eval "$__out"
   fi
@@ -55,12 +60,17 @@ command_not_found_handle() {
 const zshSnippet = `# nudge shell integration (zsh) — add to ~/.zshrc:  eval "$(nudge init zsh)"
 nudge() {
   local __ec=$?
-  if [ $# -gt 0 ]; then
-    command nudge "$@"
-    return
-  fi
+  case "$1" in
+    init|doctor|setup|version|help|--version|-v|--help|-h)
+      command nudge "$@"
+      return ;;
+  esac
   local __out
-  __out=$(NUDGE_HISTORY="$(fc -ln -5 2>/dev/null)" command nudge --shell-eval --last-exit "$__ec")
+  if [ $# -gt 0 ]; then
+    __out=$(command nudge --shell-eval "$@")
+  else
+    __out=$(NUDGE_HISTORY="$(fc -ln -5 2>/dev/null)" command nudge --shell-eval --last-exit "$__ec")
+  fi
   if [ $? -eq 0 ] && [ -n "$__out" ]; then
     eval "$__out"
   fi
@@ -75,7 +85,15 @@ const fishSnippet = `# nudge shell integration (fish) — add to ~/.config/fish/
 function nudge
     set -l __ec $status
     if test (count $argv) -gt 0
-        command nudge $argv
+        switch $argv[1]
+            case init doctor setup version help --version -v --help -h
+                command nudge $argv
+                return
+        end
+        set -l __out (command nudge --shell-eval $argv)
+        if test $status -eq 0; and test -n "$__out"
+            eval $__out
+        end
         return
     end
     set -lx NUDGE_HISTORY (string join \n $history[1..5])
@@ -99,7 +117,14 @@ $global:__nudgeBin = '%s'
 function global:nudge {
     $ec = $global:LASTEXITCODE
     if ($args.Count -gt 0) {
-        & $global:__nudgeBin @args
+        if ($args[0] -in @('init','doctor','setup','version','help','--version','-v','--help','-h')) {
+            & $global:__nudgeBin @args
+            return
+        }
+        $out = & $global:__nudgeBin --shell-eval @args
+        if ($LASTEXITCODE -eq 0 -and $out) {
+            Invoke-Expression (@($out) -join "` + "`" + `n")
+        }
         return
     }
     $hist = @(Get-History -Count 5 | ForEach-Object { $_.CommandLine })

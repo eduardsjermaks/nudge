@@ -170,11 +170,16 @@ Model output is untrusted input:
    Providers above).
 
 **`shell_state` correction:** small models set `shell_state` unreliably (the
-1.5B model flagged `git push` as shell-state during development). The
-deterministic detector (cd/export/source/activate/`$env:` prefixes) is
-authoritative for anything it can classify; the model's hint is honored only
-when the first word isn't a known executable, i.e. when we have no local
-evidence at all.
+1.5B model flagged `git push` and `mkdir test && git init` as shell-state
+during development). The model's hint is therefore **ignored for control
+flow** — it stays in the JSON contract but never blocks execution. The
+deterministic detector (cd/export/source/activate/`$env:` prefixes) is the
+sole authority, and it exists for mechanics, not policy: those commands are
+a silent no-op in a child process (a subprocess `cd` cannot move the user's
+shell), so running them would lie to the user. A confirmed command that the
+detector does not match always runs. The failure mode of a detector miss is
+mild — the command runs in a child and visibly has no effect — while the
+failure mode of a false positive is a confirmed command that refuses to run.
 
 ## Shell integration tradeoffs
 
@@ -186,7 +191,10 @@ every shell's line editor. Instead, the zoxide/starship/thefuck pattern:
    cmd.exe, zero setup. But it cannot see your last command (shell history is
    shell state), and standalone execution runs suggestions in a *subprocess*,
    so `cd`/`activate` suggestions can't take effect — those are printed with a
-   note instead.
+   note instead. When the integration *is* installed, the wrapper function
+   routes explicit invocations through `--shell-eval` too, so shell-state
+   suggestions take effect; subcommands (`init`, `doctor`, `setup`, …) are
+   passed through directly so their stdout is never eval'd.
 2. **Bare `nudge` / `fix`** — a shell *function* installed by `nudge init`
    that shadows the binary. Called with no args it passes the last few history
    lines (bash/zsh `fc -ln -5`, PowerShell `Get-History`, fish `$history`) via
@@ -210,10 +218,13 @@ every shell's line editor. Instead, the zoxide/starship/thefuck pattern:
    the handler runs in a forked child, so it executes corrections as
    subprocesses — shell-state corrections still need `fix`.
 
-Execution semantics summary: through the wrapper → confirmed command goes to
-stdout, shell evals it. Standalone → subprocess, except shell-state
-suggestions which are printed with a note. Non-TTY → print the suggestion,
-exit 3, never prompt, never run.
+Execution semantics summary: through the wrapper (bare *or* explicit) →
+confirmed command goes to stdout, shell evals it; for PowerShell targets,
+`&&` chains are rewritten to `$?`-guarded blocks first (5.1 can't parse
+`&&`; the guarded form is equivalent on 7). Standalone → subprocess (same
+rewrite when falling back to powershell.exe), except shell-state suggestions
+which are printed with a note. Non-TTY → print the suggestion, exit 3,
+never prompt, never run.
 
 ## Decisions made along the way
 

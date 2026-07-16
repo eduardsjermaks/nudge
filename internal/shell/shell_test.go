@@ -20,6 +20,17 @@ func TestInitSnippets(t *testing.T) {
 		if !strings.Contains(strings.ToLower(s), "fix") {
 			t.Errorf("%s snippet must install the fix alias", sh)
 		}
+		// Explicit `nudge <words>` must go through shell-eval too, so
+		// shell-state suggestions (cd, activate) take effect — but the
+		// subcommands must bypass it or their stdout would be eval'd.
+		for _, sub := range []string{"init", "doctor", "setup"} {
+			if !strings.Contains(s, sub) {
+				t.Errorf("%s snippet must pass the %s subcommand through directly", sh, sub)
+			}
+		}
+		if strings.Count(s, "--shell-eval") < 2 {
+			t.Errorf("%s snippet must use shell-eval for both bare and explicit invocations", sh)
+		}
 	}
 	// each shell gets its own not-found hook name
 	for sh, hook := range map[string]string{

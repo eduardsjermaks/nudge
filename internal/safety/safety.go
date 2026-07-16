@@ -71,16 +71,17 @@ func Check(command string, modelHint bool) Verdict {
 // shellStateRe: commands that only make sense inside the current shell.
 var shellStateRe = regexp.MustCompile(`(?i)^(cd|pushd|popd|export|unset|set\s|setx|source|\.\s|alias|activate\b|conda\s+activate|\$env:)`)
 
-// ChangesShellState reports whether a command mutates shell state and must
-// be eval'd by the shell (or run manually) rather than in a subprocess.
+// ChangesShellState reports whether a command mutates shell state and would
+// therefore be a silent no-op in a subprocess: `cd` in a child process
+// succeeds but the user's shell stays where it was. Those commands must be
+// eval'd by the shell (via the integration) or run manually.
 //
-// The deterministic check is authoritative in both directions for anything
-// it can classify: small local models set shell_state unreliably (observed:
-// `git push` flagged true), and a false positive silently stops execution.
-// The model hint is only honored when the first word is not a known
-// executable, i.e. when we have no local evidence of our own. knownExe may
-// be nil.
-func ChangesShellState(command string, modelHint bool, knownExe func(string) bool) bool {
+// This deterministic check is the sole authority. The model also reports a
+// shell_state hint, but small local models set it unreliably (observed:
+// `git push`, `mkdir x && git init` flagged true), and a false positive here
+// silently blocks a command the user already confirmed — worse than the
+// miss, where the command runs in a child and merely has no visible effect.
+func ChangesShellState(command string) bool {
 	c := strings.TrimSpace(command)
 	if shellStateRe.MatchString(c) {
 		return true
@@ -89,8 +90,5 @@ func ChangesShellState(command string, modelHint bool, knownExe func(string) boo
 	if strings.Contains(strings.ToLower(c), "activate") && !strings.Contains(c, "deactivate") {
 		return true
 	}
-	if fields := strings.Fields(c); len(fields) > 0 && knownExe != nil && knownExe(fields[0]) {
-		return false
-	}
-	return modelHint
+	return false
 }

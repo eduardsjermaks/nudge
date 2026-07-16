@@ -51,15 +51,18 @@ func ProjectMarkers(dir string) []string {
 }
 
 // ShellName guesses the invoking shell from the environment; best-effort.
+// SHELL wins even on Windows: Git Bash/MSYS/Cygwin set it while PowerShell
+// and cmd do not, and PSModulePath alone would misread those as PowerShell —
+// wrong syntax in the prompt AND in the shell-eval && rewrite.
 func ShellName() string {
+	if sh := os.Getenv("SHELL"); sh != "" {
+		return filepath.Base(sh)
+	}
 	if runtime.GOOS == "windows" {
 		if os.Getenv("PSModulePath") != "" {
 			return "powershell"
 		}
 		return "cmd"
-	}
-	if sh := os.Getenv("SHELL"); sh != "" {
-		return filepath.Base(sh)
 	}
 	return "sh"
 }

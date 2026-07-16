@@ -323,14 +323,19 @@ func present(o opts, input string, s *suggest.Suggestion, threshold float64, int
 func execute(o opts, final string, s *suggest.Suggestion) int {
 	if o.shellEval {
 		// The wrapper function evals stdout in the user's shell, so
-		// shell-state suggestions (cd, activate) work naturally.
+		// shell-state suggestions (cd, activate) work naturally. PowerShell
+		// gets && chains rewritten: 5.1 cannot parse them, and the guarded
+		// form is equivalent on 7.
+		if prompt.ShellName() == "powershell" {
+			final = execx.RewriteAndChains(final)
+		}
 		fmt.Println(final)
 		return 0
 	}
-	if safety.ChangesShellState(final, s.ShellState, isExecutable) {
+	if safety.ChangesShellState(final) {
 		fmt.Println(final)
-		ui.Errf("this command changes shell state — run it in your shell, or install the\n")
-		ui.Errf("integration (%s) so nudge can apply it for you.\n", initHint())
+		ui.Errf("this command only takes effect inside your shell — run the line above yourself.\n")
+		ui.Errf("(bare `nudge` / `fix` after a failure applies it for you; needs the integration: %s)\n", initHint())
 		return 0
 	}
 	return execx.Run(final)
