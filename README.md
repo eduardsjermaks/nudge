@@ -61,6 +61,43 @@ curl -fsSL https://raw.githubusercontent.com/eduardsjermaks/nudge/main/install.s
 The install scripts download binaries from the latest GitHub release. Building
 from source: `go build ./cmd/nudge` — no CGO, no exotic deps.
 
+The installer tells you where it put the binary. If it also printed a note
+that the directory is **not on your PATH**, `nudge` will not run until you fix
+that — see the PATH setup for your platform below.
+
+### Linux / macOS PATH setup
+
+`install.sh` installs to `/usr/local/bin` when that is writable (already on
+your PATH — nothing to do), and otherwise to `~/.local/bin`, which many
+distributions do *not* have on `PATH` by default. If `nudge` comes back as
+`command not found`, add that directory to your shell profile:
+
+```bash
+# bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+. ~/.bashrc
+```
+```zsh
+# zsh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+. ~/.zshrc
+```
+```fish
+# fish
+fish_add_path ~/.local/bin
+```
+
+Then verify:
+
+```bash
+command -v nudge
+```
+
+On Ubuntu and other Debian-based systems, `~/.profile` adds `~/.local/bin` to
+`PATH` automatically — but only if the directory already existed when you
+logged in. If the installer just created it, a full log out and back in also
+works; the line above avoids the wait.
+
 ### Windows PATH setup
 
 The PowerShell installer above adds its install directory to your user `PATH`
@@ -105,19 +142,23 @@ ollama pull qwen2.5-coder:1.5b
 leave your machine) — two steps: name the provider in the config file, then
 put the API key in an environment variable. Using Anthropic as the example:
 
-*Create the config file.* nudge reads it from `%APPDATA%\nudge\config.toml`
-on Windows and `~/.config/nudge/config.toml` elsewhere, and never creates it
-for you — the directory has to exist:
+*Create the config file.* nudge never creates it for you — the directory has
+to exist. Locations differ per platform (`nudge doctor` prints the exact one):
 
 ```powershell
-# Windows (PowerShell)
+# Windows — %APPDATA%\nudge\config.toml
 New-Item -ItemType Directory -Path "$env:APPDATA\nudge" -Force
 Set-Content -Path "$env:APPDATA\nudge\config.toml" -Value 'provider = "anthropic"' -Encoding utf8
 ```
 ```bash
-# Linux / macOS
+# Linux — ~/.config/nudge/config.toml (or $XDG_CONFIG_HOME/nudge/config.toml)
 mkdir -p ~/.config/nudge
 echo 'provider = "anthropic"' >> ~/.config/nudge/config.toml
+```
+```bash
+# macOS — ~/Library/Application Support/nudge/config.toml
+mkdir -p ~/Library/Application\ Support/nudge
+echo 'provider = "anthropic"' >> ~/Library/Application\ Support/nudge/config.toml
 ```
 
 *Set the API key.* Each provider reads its own standard variable —
@@ -381,8 +422,11 @@ doctor report (it shows only "present, ends …xxxx").
 
 ## Configuration (infrastructure only — there is no matching config)
 
-`%APPDATA%\nudge\config.toml` on Windows, `~/.config/nudge/config.toml`
-elsewhere. Env vars in parentheses override the file:
+`%APPDATA%\nudge\config.toml` on Windows,
+`~/Library/Application Support/nudge/config.toml` on macOS, and
+`$XDG_CONFIG_HOME/nudge/config.toml` (default `~/.config/nudge/config.toml`)
+elsewhere. `nudge doctor` prints the path it actually uses. Env vars in
+parentheses override the file:
 
 ```toml
 provider   = "ollama"                    # (NUDGE_PROVIDER) ollama | openai | azure | anthropic | deepseek | custom
@@ -439,10 +483,12 @@ What leaves your machine depends entirely on which provider *you* configured:
 ## Uninstall
 
 1. Remove the init line from your shell profile.
-2. Delete the binary.
+2. Delete the binary — `%LOCALAPPDATA%\Programs\nudge` (Windows) or
+   `~/.local/bin/nudge` / `/usr/local/bin/nudge` (Linux/macOS) if you used an
+   install script — and remove the PATH entry you added for it.
 3. Delete config and cache: `%APPDATA%\nudge` + `%LOCALAPPDATA%\nudge`
    (Windows), `~/.config/nudge` + `~/.cache/nudge` (Linux),
-   `~/Library/Caches/nudge` (macOS).
+   `~/Library/Application Support/nudge` + `~/Library/Caches/nudge` (macOS).
 4. If you installed Ollama only for this: `ollama rm qwen2.5-coder:1.5b` and
    uninstall Ollama.
 

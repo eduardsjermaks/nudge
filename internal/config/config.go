@@ -54,8 +54,10 @@ func Defaults() Config {
 	}
 }
 
-// Path returns the config file location:
-// Windows %APPDATA%\nudge\config.toml, elsewhere ~/.config/nudge/config.toml.
+// Path returns the config file location, following os.UserConfigDir:
+// Windows %APPDATA%\nudge\config.toml, macOS
+// ~/Library/Application Support/nudge/config.toml, and elsewhere
+// $XDG_CONFIG_HOME/nudge/config.toml (falling back to ~/.config).
 func Path() string {
 	if runtime.GOOS == "windows" {
 		if appdata := os.Getenv("APPDATA"); appdata != "" {
