@@ -61,17 +61,30 @@ curl -fsSL https://raw.githubusercontent.com/eduardsjermaks/nudge/main/install.s
 The install scripts download binaries from the latest GitHub release. Building
 from source: `go build ./cmd/nudge` — no CGO, no exotic deps.
 
-**2. Pick a model** — one of the two, see
-[Choosing a brain](#choosing-a-brain) for the tradeoffs:
+**2. Run the wizard:**
 
-**2a. Local model server** (default, recommended — private, free per query) —
+```
+nudge setup
+```
+
+It checks every piece and offers to fix what's missing: installs and starts
+Ollama (or configures a cloud provider instead), pulls the model, adds the
+shell integration, and finishes with `nudge doctor`. Every change asks for
+confirmation first, and it is safe to re-run any time. If it ends with
+"all good." you are done — the rest of this section is the manual
+equivalent.
+
+**3. Manual alternative: pick a model** — skip if the wizard did this. One
+of the two, see [Choosing a brain](#choosing-a-brain) for the tradeoffs:
+
+**3a. Local model server** (default, recommended — private, free per query) —
 [Ollama](https://ollama.com/download):
 
 ```
 ollama pull qwen2.5-coder:1.5b
 ```
 
-**2b. Cloud model** (no ~1 GB download or RAM cost; needs an API key, queries
+**3b. Cloud model** (no ~1 GB download or RAM cost; needs an API key, queries
 leave your machine) — two steps: name the provider in the config file, then
 put the API key in an environment variable. Using Anthropic as the example:
 
@@ -113,10 +126,11 @@ OpenAI, and DeepSeek are configured the same way — see
 [Per-provider setup](#per-provider-setup) for their config keys, and
 [Credentials](#credentials) for alternatives to a plain environment variable.
 
-**3. Add the shell integration** (optional but recommended — enables bare
-`nudge` / `fix` and automatic catch of misspelled binaries). Choose your
-shell below. Each setup confirms that `nudge` is available, adds the generated
-integration, reloads the shell configuration, and verifies `fix`.
+**4. Manual alternative: add the shell integration** — skip if the wizard
+did this. Optional but recommended: it enables bare `nudge` / `fix` and the
+automatic catch of misspelled binaries. Choose your shell below. Each setup
+confirms that `nudge` is available, adds the generated integration, reloads
+the shell configuration, and verifies `fix`.
 
 ### PATH setup
 

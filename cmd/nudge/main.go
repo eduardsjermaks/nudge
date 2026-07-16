@@ -20,6 +20,7 @@ import (
 	"nudge/internal/prompt"
 	"nudge/internal/provider"
 	"nudge/internal/safety"
+	"nudge/internal/setup"
 	"nudge/internal/shell"
 	"nudge/internal/suggest"
 	"nudge/internal/tier1"
@@ -60,6 +61,8 @@ func run(args []string) int {
 			}
 			fmt.Print(snippet)
 			return 0
+		case "setup":
+			return setup.Run()
 		case "doctor":
 			return doctor.Run()
 		case "version", "--version", "-v":
@@ -378,6 +381,7 @@ leaves your machine unless you configure a cloud provider).
 usage:
   nudge <failed command or plain words>   suggest a correction / a command
   nudge                                   fix the last command (needs shell integration)
+  nudge setup                             interactive wizard: model server, model, shell hook
   nudge init <bash|zsh|fish|powershell>   print the shell integration snippet
   nudge doctor                            diagnose the active model provider
   nudge version                           print version

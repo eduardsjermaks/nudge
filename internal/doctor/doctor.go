@@ -73,7 +73,7 @@ func Run() int {
 		if avail {
 			pass("model %s is pulled", prov.Model)
 		} else {
-			fail("model %s not found — run `ollama pull %s`", prov.Model, prov.Model)
+			fail("model %s not found — run `nudge setup` or `ollama pull %s`", prov.Model, prov.Model)
 			return 1
 		}
 	} else {

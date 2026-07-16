@@ -157,6 +157,39 @@ func EditLine(current string) (string, error) {
 	return line, nil
 }
 
+// Ask prompts on stderr and returns the trimmed answer line.
+func Ask(label string) (string, error) {
+	Errf("%s ", label)
+	line, err := readLine()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(line), nil
+}
+
+// AskYesNo asks a yes/no question. defYes controls what bare Enter means;
+// pass false for actions that deserve an explicit typed "y" (mirrors the
+// strict confirm used for destructive suggestions).
+func AskYesNo(label string, defYes bool) (bool, error) {
+	if defYes {
+		Errf("%s [Y/n] ", label)
+	} else {
+		Errf("%s [y/N] ", label)
+	}
+	line, err := readLine()
+	if err != nil {
+		return false, err
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true, nil
+	case "":
+		return defYes, nil
+	default:
+		return false, nil
+	}
+}
+
 // AskValue prompts for a placeholder value.
 func AskValue(name string) (string, error) {
 	for {

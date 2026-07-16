@@ -34,7 +34,7 @@ case ":$PATH:" in
   *) on_path=no ;;
 esac
 
-# Name the rc file for the shell the user actually logs into, so every
+# Name the rc file for the shell the user actually logs into, so the PATH
 # instruction below is a runnable command rather than one to translate.
 shname=$(basename "${SHELL:-/bin/sh}")
 case "$shname" in
@@ -44,56 +44,34 @@ case "$shname" in
   *)    shname=bash; rc="$HOME/.profile" ;;
 esac
 
-# fish has no `eval "$(...)"` and dropped `.` as a source alias.
-if [ "$shname" = fish ]; then
-  path_cmd="fish_add_path $dest"
-  init_cmd="mkdir -p $(dirname "$rc") && nudge init fish >> $rc"
-  reload_cmd="source $rc"
-else
-  path_cmd="echo 'export PATH=\"$dest:\$PATH\"' >> $rc"
-  init_cmd="echo 'eval \"\$(nudge init $shname)\"' >> $rc"
-  reload_cmd=". $rc"
-fi
-
-# Mirrors config.Path(): Go's os.UserConfigDir() is $HOME/Library/Application
-# Support on darwin, and $XDG_CONFIG_HOME (else $HOME/.config) on Linux.
-if [ "$os" = darwin ]; then
-  cfg="$HOME/Library/Application Support/nudge/config.toml"
-else
-  cfg="${XDG_CONFIG_HOME:-$HOME/.config}/nudge/config.toml"
-fi
-
 if [ "$on_path" = no ]; then
   echo
   echo "NOTE: $dest is not on your PATH, so \`nudge\` will not run yet."
   echo "Add it, then reopen your shell (or run the same line in this one):"
   echo
-  echo "  $path_cmd"
-  [ "$shname" = fish ] || echo "  $reload_cmd"
+  if [ "$shname" = fish ]; then
+    echo "  fish_add_path $dest"
+  else
+    echo "  echo 'export PATH=\"$dest:\$PATH\"' >> $rc"
+    echo "  . $rc"
+  fi
   echo
   echo "Then verify with:  command -v nudge"
 fi
 
-cat <<EOF
+cat <<'EOF'
 
-next steps:
-  1. pick a model — either one:
-       a. local (default, private, free per query):
-            install Ollama:  https://ollama.com/download  (or your package manager)
-            pull the model:  ollama pull qwen2.5-coder:1.5b
-       b. cloud (needs an API key; queries leave your machine):
-            put  provider = "anthropic"  (or openai / azure / deepseek) in
-            $cfg
-            and set the matching key, e.g. export ANTHROPIC_API_KEY=...
-            details: https://github.com/eduardsjermaks/nudge#choosing-a-brain
-  2. enable the shell hook (bare \`nudge\` / \`fix\`):
-       $init_cmd
-       $reload_cmd
-  3. verify:
-       nudge doctor
+next step — run the wizard:
+
+  nudge setup
+
+It installs and starts Ollama (or configures a cloud provider instead),
+pulls the model, and adds the shell hook — asking before every change.
+Safe to re-run any time. Manual steps, if you prefer doing it by hand:
+https://github.com/eduardsjermaks/nudge#install-5-minutes
 EOF
 
 if [ "$on_path" = no ]; then
   echo
-  echo "(do the PATH step above first — steps 2 and 3 run nudge)"
+  echo "(do the PATH step above first — nudge setup needs nudge on your PATH)"
 fi
