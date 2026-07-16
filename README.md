@@ -61,73 +61,6 @@ curl -fsSL https://raw.githubusercontent.com/eduardsjermaks/nudge/main/install.s
 The install scripts download binaries from the latest GitHub release. Building
 from source: `go build ./cmd/nudge` — no CGO, no exotic deps.
 
-The installer tells you where it put the binary. If it also printed a note
-that the directory is **not on your PATH**, `nudge` will not run until you fix
-that — see the PATH setup for your platform below.
-
-### Linux / macOS PATH setup
-
-`install.sh` installs to `/usr/local/bin` when that is writable (already on
-your PATH — nothing to do), and otherwise to `~/.local/bin`, which many
-distributions do *not* have on `PATH` by default. If `nudge` comes back as
-`command not found`, add that directory to your shell profile:
-
-```bash
-# bash
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-. ~/.bashrc
-```
-```zsh
-# zsh
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
-. ~/.zshrc
-```
-```fish
-# fish
-fish_add_path ~/.local/bin
-```
-
-Then verify:
-
-```bash
-command -v nudge
-```
-
-On Ubuntu and other Debian-based systems, `~/.profile` adds `~/.local/bin` to
-`PATH` automatically — but only if the directory already existed when you
-logged in. If the installer just created it, a full log out and back in also
-works; the line above avoids the wait.
-
-### Windows PATH setup
-
-The PowerShell installer above adds its install directory to your user `PATH`
-automatically. Open a new PowerShell session and verify the command is
-available:
-
-```powershell
-Get-Command nudge
-```
-
-For a manually downloaded or locally built `nudge.exe`, copy it to a stable
-user directory and add that directory to your user `PATH`:
-
-```powershell
-$nudgeBin = Join-Path $env:LOCALAPPDATA 'Programs\nudge'
-New-Item -ItemType Directory -Path $nudgeBin -Force
-Copy-Item .\nudge.exe -Destination $nudgeBin -Force
-
-$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-if ($userPath -notlike "*$nudgeBin*") {
-  [Environment]::SetEnvironmentVariable('Path', "$userPath;$nudgeBin", 'User')
-}
-```
-
-Open a new PowerShell session after changing `PATH`, then run:
-
-```powershell
-Get-Command nudge
-```
-
 **2. Pick a model** — one of the two, see
 [Choosing a brain](#choosing-a-brain) for the tradeoffs:
 
@@ -184,6 +117,76 @@ OpenAI, and DeepSeek are configured the same way — see
 `nudge` / `fix` and automatic catch of misspelled binaries). Choose your
 shell below. Each setup confirms that `nudge` is available, adds the generated
 integration, reloads the shell configuration, and verifies `fix`.
+
+### PATH setup
+
+The installer tells you where it put the binary. If it also printed a note
+that the directory is **not on your PATH**, `nudge` will not run until you fix
+that — see the PATH setup for your platform below.
+
+#### Linux / macOS
+
+`install.sh` installs to `/usr/local/bin` when that is writable (already on
+your PATH — nothing to do), and otherwise to `~/.local/bin`, which many
+distributions do *not* have on `PATH` by default. If `nudge` comes back as
+`command not found`, add that directory to your shell profile:
+
+```bash
+# bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+. ~/.bashrc
+```
+```zsh
+# zsh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
+. ~/.zshrc
+```
+```fish
+# fish
+fish_add_path ~/.local/bin
+```
+
+Then verify:
+
+```bash
+command -v nudge
+```
+
+On Ubuntu and other Debian-based systems, `~/.profile` adds `~/.local/bin` to
+`PATH` automatically — but only if the directory already existed when you
+logged in. If the installer just created it, a full log out and back in also
+works; the line above avoids the wait.
+
+#### Windows
+
+The PowerShell installer above adds its install directory to your user `PATH`
+automatically. Open a new PowerShell session and verify the command is
+available:
+
+```powershell
+Get-Command nudge
+```
+
+For a manually downloaded or locally built `nudge.exe`, copy it to a stable
+user directory and add that directory to your user `PATH`:
+
+```powershell
+$nudgeBin = Join-Path $env:LOCALAPPDATA 'Programs\nudge'
+New-Item -ItemType Directory -Path $nudgeBin -Force
+Copy-Item .\nudge.exe -Destination $nudgeBin -Force
+
+$userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
+if ($userPath -notlike "*$nudgeBin*") {
+  [Environment]::SetEnvironmentVariable('Path', "$userPath;$nudgeBin", 'User')
+}
+```
+
+Open a new PowerShell session after changing `PATH`, then run:
+
+```powershell
+Get-Command nudge
+```
+
 
 ### PowerShell
 
