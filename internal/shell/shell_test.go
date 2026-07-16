@@ -32,6 +32,19 @@ func TestInitSnippets(t *testing.T) {
 			t.Errorf("%s snippet must use shell-eval for both bare and explicit invocations", sh)
 		}
 	}
+	// PowerShell and fish hooks run in the shell process itself, so their
+	// not-found path must eval too; bash/zsh hooks fork and cannot. The
+	// wrapper always names its shell — env heuristics misfire when shells
+	// nest (pwsh under Git Bash inherits SHELL).
+	for sh, flag := range map[string]string{
+		"powershell": "--shell pwsh --not-found",
+		"fish":       "--shell fish --not-found",
+	} {
+		s, _ := Init(sh)
+		if !strings.Contains(s, "--shell-eval "+flag) {
+			t.Errorf("%s not-found hook must go through shell-eval with an explicit --shell", sh)
+		}
+	}
 	// each shell gets its own not-found hook name
 	for sh, hook := range map[string]string{
 		"bash":       "command_not_found_handle",

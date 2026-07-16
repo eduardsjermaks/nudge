@@ -214,9 +214,12 @@ every shell's line editor. Instead, the zoxide/starship/thefuck pattern:
    automatically — but *only* when the binary itself doesn't exist. That
    limitation is documented rather than papered over; `fix` covers the rest.
    The PowerShell hook filters on `CommandOrigin -eq 'Runspace'` (interactive
-   lookups only) and skips PowerShell's internal `get-` retry probe. In bash
-   the handler runs in a forked child, so it executes corrections as
-   subprocesses — shell-state corrections still need `fix`.
+   lookups only) and skips PowerShell's internal `get-` retry probe. The
+   PowerShell and fish hooks run in the shell process itself, so they route
+   through `--shell-eval` and eval the output — shell-state corrections take
+   effect. In bash/zsh the handler runs in a forked child that cannot touch
+   the parent shell, so those hooks execute corrections as subprocesses —
+   shell-state corrections there still need `fix`.
 
 Execution semantics summary: through the wrapper (bare *or* explicit) →
 confirmed command goes to stdout, shell evals it; for PowerShell targets,

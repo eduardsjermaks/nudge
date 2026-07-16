@@ -43,9 +43,9 @@ nudge() {
   esac
   local __out
   if [ $# -gt 0 ]; then
-    __out=$(command nudge --shell-eval "$@")
+    __out=$(command nudge --shell-eval --shell bash "$@")
   else
-    __out=$(NUDGE_HISTORY="$(fc -ln -5 2>/dev/null)" command nudge --shell-eval --last-exit "$__ec")
+    __out=$(NUDGE_HISTORY="$(fc -ln -5 2>/dev/null)" command nudge --shell-eval --shell bash --last-exit "$__ec")
   fi
   if [ $? -eq 0 ] && [ -n "$__out" ]; then
     eval "$__out"
@@ -67,9 +67,9 @@ nudge() {
   esac
   local __out
   if [ $# -gt 0 ]; then
-    __out=$(command nudge --shell-eval "$@")
+    __out=$(command nudge --shell-eval --shell zsh "$@")
   else
-    __out=$(NUDGE_HISTORY="$(fc -ln -5 2>/dev/null)" command nudge --shell-eval --last-exit "$__ec")
+    __out=$(NUDGE_HISTORY="$(fc -ln -5 2>/dev/null)" command nudge --shell-eval --shell zsh --last-exit "$__ec")
   fi
   if [ $? -eq 0 ] && [ -n "$__out" ]; then
     eval "$__out"
@@ -90,14 +90,14 @@ function nudge
                 command nudge $argv
                 return
         end
-        set -l __out (command nudge --shell-eval $argv)
+        set -l __out (command nudge --shell-eval --shell fish $argv)
         if test $status -eq 0; and test -n "$__out"
             eval $__out
         end
         return
     end
     set -lx NUDGE_HISTORY (string join \n $history[1..5])
-    set -l __out (command nudge --shell-eval --last-exit $__ec)
+    set -l __out (command nudge --shell-eval --shell fish --last-exit $__ec)
     if test $status -eq 0; and test -n "$__out"
         eval $__out
     end
@@ -106,7 +106,11 @@ function fix
     nudge $argv
 end
 function fish_command_not_found
-    command nudge --not-found -- $argv
+    # Runs in the fish process itself, so eval makes cd/env suggestions stick.
+    set -l __out (command nudge --shell-eval --shell fish --not-found -- $argv)
+    if test $status -eq 0; and test -n "$__out"
+        eval $__out
+    end
 end
 `
 
@@ -121,7 +125,7 @@ function global:nudge {
             & $global:__nudgeBin @args
             return
         }
-        $out = & $global:__nudgeBin --shell-eval @args
+        $out = & $global:__nudgeBin --shell-eval --shell pwsh @args
         if ($LASTEXITCODE -eq 0 -and $out) {
             Invoke-Expression (@($out) -join "` + "`" + `n")
         }
@@ -134,7 +138,7 @@ function global:nudge {
     }
     $env:NUDGE_HISTORY = ($hist -join "` + "`" + `n")
     try {
-        $out = & $global:__nudgeBin --shell-eval --last-exit "$ec"
+        $out = & $global:__nudgeBin --shell-eval --shell pwsh --last-exit "$ec"
         if ($LASTEXITCODE -eq 0 -and $out) {
             Invoke-Expression (@($out) -join "` + "`" + `n")
         }
@@ -146,8 +150,13 @@ Set-Alias -Name fix -Value nudge -Scope Global -Force
 $ExecutionContext.InvokeCommand.CommandNotFoundAction = {
     param($CommandName, $EventArgs)
     if ($EventArgs.CommandOrigin -eq 'Runspace' -and $CommandName -notmatch '^get-') {
+        # The scriptblock runs in the session itself, so eval'ing the
+        # confirmed command here lets cd/env suggestions take effect.
         $EventArgs.CommandScriptBlock = {
-            & $global:__nudgeBin --not-found -- $CommandName @args
+            $out = & $global:__nudgeBin --shell-eval --shell pwsh --not-found -- $CommandName @args
+            if ($LASTEXITCODE -eq 0 -and $out) {
+                Invoke-Expression (@($out) -join "` + "`" + `n")
+            }
         }.GetNewClosure()
         $EventArgs.StopSearch = $true
     }

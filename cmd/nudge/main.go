@@ -40,6 +40,7 @@ type opts struct {
 	notFound  bool
 	fixMode   bool
 	lastExit  int
+	shell     string // set by the wrapper (--shell); "" = autodetect
 }
 
 func main() {
@@ -126,6 +127,11 @@ func parseFlags(args []string, o *opts) []string {
 					o.lastExit = n
 				}
 			}
+		case "--shell":
+			if i+1 < len(args) {
+				i++
+				o.shell = strings.ToLower(args[i])
+			}
 		case "--":
 			return append(words, args[i+1:]...)
 		default:
@@ -187,6 +193,7 @@ func correct(o opts, words []string) int {
 		FixMode:  o.fixMode,
 		ExitCode: o.lastExit,
 		Dir:      cwd(),
+		Shell:    o.shell,
 	}
 	// Cloud providers get a masked copy of the input; the placeholders are
 	// swapped back after the model answers. Local providers see the input
@@ -325,8 +332,14 @@ func execute(o opts, final string, s *suggest.Suggestion) int {
 		// The wrapper function evals stdout in the user's shell, so
 		// shell-state suggestions (cd, activate) work naturally. PowerShell
 		// gets && chains rewritten: 5.1 cannot parse them, and the guarded
-		// form is equivalent on 7.
-		if prompt.ShellName() == "powershell" {
+		// form is equivalent on 7. The wrapper's --shell is authoritative —
+		// env heuristics misfire when shells nest (pwsh under Git Bash
+		// inherits SHELL, Git Bash under Windows sees PSModulePath).
+		sh := o.shell
+		if sh == "" {
+			sh = prompt.ShellName()
+		}
+		if sh == "powershell" || sh == "pwsh" {
 			final = execx.RewriteAndChains(final)
 		}
 		fmt.Println(final)
