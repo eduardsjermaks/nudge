@@ -193,10 +193,12 @@ integration, reloads the shell configuration, and verifies `fix`.
    Get-Command nudge
    ```
 
-2. Create your PowerShell profile if it does not already exist:
+2. Create your PowerShell profile if it does not already exist. The
+   `Test-Path` guard matters: `New-Item -Force` on its own **empties an
+   existing profile**.
 
   ```powershell
-  New-Item -ItemType File -Path $PROFILE -Force
+  if (-not (Test-Path $PROFILE)) { New-Item -ItemType File -Path $PROFILE -Force }
   ```
 
 3. Add this line to the profile:

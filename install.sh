@@ -34,14 +34,26 @@ case ":$PATH:" in
   *) on_path=no ;;
 esac
 
-# Name the rc file for the shell the user actually logs into, so the
-# instruction below can be copy-pasted rather than translated.
-case "$(basename "${SHELL:-/bin/sh}")" in
+# Name the rc file for the shell the user actually logs into, so every
+# instruction below is a runnable command rather than one to translate.
+shname=$(basename "${SHELL:-/bin/sh}")
+case "$shname" in
   zsh)  rc="$HOME/.zshrc" ;;
   bash) rc="$HOME/.bashrc" ;;
   fish) rc="$HOME/.config/fish/config.fish" ;;
-  *)    rc="$HOME/.profile" ;;
+  *)    shname=bash; rc="$HOME/.profile" ;;
 esac
+
+# fish has no `eval "$(...)"` and dropped `.` as a source alias.
+if [ "$shname" = fish ]; then
+  path_cmd="fish_add_path $dest"
+  init_cmd="mkdir -p $(dirname "$rc") && nudge init fish >> $rc"
+  reload_cmd="source $rc"
+else
+  path_cmd="echo 'export PATH=\"$dest:\$PATH\"' >> $rc"
+  init_cmd="echo 'eval \"\$(nudge init $shname)\"' >> $rc"
+  reload_cmd=". $rc"
+fi
 
 # Mirrors config.Path(): Go's os.UserConfigDir() is $HOME/Library/Application
 # Support on darwin, and $XDG_CONFIG_HOME (else $HOME/.config) on Linux.
@@ -56,12 +68,8 @@ if [ "$on_path" = no ]; then
   echo "NOTE: $dest is not on your PATH, so \`nudge\` will not run yet."
   echo "Add it, then reopen your shell (or run the same line in this one):"
   echo
-  if [ "$rc" = "$HOME/.config/fish/config.fish" ]; then
-    echo "  fish_add_path $dest"
-  else
-    echo "  echo 'export PATH=\"$dest:\$PATH\"' >> $rc"
-    echo "  . $rc"
-  fi
+  echo "  $path_cmd"
+  [ "$shname" = fish ] || echo "  $reload_cmd"
   echo
   echo "Then verify with:  command -v nudge"
 fi
@@ -78,8 +86,11 @@ next steps:
             $cfg
             and set the matching key, e.g. export ANTHROPIC_API_KEY=...
             details: https://github.com/eduardsjermaks/nudge#choosing-a-brain
-  2. add to your rc:  eval "\$(nudge init bash)"     # or zsh / fish
-  3. verify:          nudge doctor
+  2. enable the shell hook (bare \`nudge\` / \`fix\`):
+       $init_cmd
+       $reload_cmd
+  3. verify:
+       nudge doctor
 EOF
 
 if [ "$on_path" = no ]; then
