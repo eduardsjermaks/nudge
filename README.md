@@ -91,16 +91,53 @@ Open a new PowerShell session after changing `PATH`, then run:
 Get-Command nudge
 ```
 
-**2. Install a local model server** — [Ollama](https://ollama.com/download)
-is the default:
+**2. Pick a model** — one of the two, see
+[Choosing a brain](#choosing-a-brain) for the tradeoffs:
+
+**2a. Local model server** (default, recommended — private, free per query) —
+[Ollama](https://ollama.com/download):
 
 ```
 ollama pull qwen2.5-coder:1.5b
 ```
 
-(Don't want a ~1 GB local model? A cloud provider with your own API key works
-too — see [Choosing a brain](#choosing-a-brain). Local stays the
-recommendation.)
+**2b. Cloud model** (no ~1 GB download or RAM cost; needs an API key, queries
+leave your machine) — two steps: name the provider in the config file, then
+put the API key in an environment variable. Using Anthropic as the example:
+
+*Create the config file.* nudge reads it from `%APPDATA%\nudge\config.toml`
+on Windows and `~/.config/nudge/config.toml` elsewhere, and never creates it
+for you — the directory has to exist:
+
+```powershell
+# Windows (PowerShell)
+New-Item -ItemType Directory -Path "$env:APPDATA\nudge" -Force
+Set-Content -Path "$env:APPDATA\nudge\config.toml" -Value 'provider = "anthropic"' -Encoding utf8
+```
+```bash
+# Linux / macOS
+mkdir -p ~/.config/nudge
+echo 'provider = "anthropic"' >> ~/.config/nudge/config.toml
+```
+
+*Set the API key.* Each provider reads its own standard variable —
+`ANTHROPIC_API_KEY` here (`OPENAI_API_KEY`, `DEEPSEEK_API_KEY`,
+`AZURE_OPENAI_API_KEY` for the others):
+
+```powershell
+# Windows (PowerShell) — persists for your user; reopen the shell afterwards
+[Environment]::SetEnvironmentVariable('ANTHROPIC_API_KEY', 'sk-ant-...', 'User')
+# current session only: $env:ANTHROPIC_API_KEY = 'sk-ant-...'
+```
+```bash
+# Linux / macOS — add to ~/.bashrc or ~/.zshrc to persist
+export ANTHROPIC_API_KEY='sk-ant-...'
+```
+
+Then run `nudge doctor` to confirm the key and endpoint work. OpenAI, Azure
+OpenAI, and DeepSeek are configured the same way — see
+[Per-provider setup](#per-provider-setup) for their config keys, and
+[Credentials](#credentials) for alternatives to a plain environment variable.
 
 **3. Add the shell integration** (optional but recommended — enables bare
 `nudge` / `fix` and automatic catch of misspelled binaries). Choose your
