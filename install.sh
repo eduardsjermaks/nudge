@@ -65,8 +65,8 @@ next step — run the wizard:
 
   nudge setup
 
-It installs and starts Ollama (or configures a cloud provider instead),
-pulls the model, and adds the shell hook — asking before every change.
+It configures a cloud provider (or installs Ollama and pulls the model,
+if you prefer local), and adds the shell hook — asking before every change.
 Safe to re-run any time. Manual steps, if you prefer doing it by hand:
 https://github.com/eduardsjermaks/nudge#install-5-minutes
 EOF

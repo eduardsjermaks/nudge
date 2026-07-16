@@ -70,21 +70,22 @@ func Run() int {
 	return code
 }
 
-// chooseBrain runs only when no config file exists yet. Local is the default
-// and needs no config; choosing cloud writes a minimal config.toml.
+// chooseBrain runs only when no config file exists yet. Cloud is the
+// recommended first choice and writes a minimal config.toml; local Ollama
+// needs no config at all (it is the built-in provider default).
 func chooseBrain() bool {
 	ui.Errf("Where should suggestions come from? (typo fixes never use a model)\n")
-	ui.Errf("  1. %s — private, free per query, ~1 GB model download (recommended)\n", ui.Bold("local (Ollama)"))
-	ui.Errf("  2. %s — no local install, needs an API key, queries leave this machine\n", ui.Bold("cloud"))
+	ui.Errf("  1. %s — best quality, no local install; needs an API key, queries leave this machine (recommended)\n", ui.Bold("cloud"))
+	ui.Errf("  2. %s — private, free per query, ~1 GB model download\n", ui.Bold("local (Ollama)"))
 	ans, err := ui.Ask("Choose [1/2, Enter = 1]:")
 	if err != nil {
 		return false
 	}
 	switch ans {
 	case "", "1":
-		return true
-	case "2":
 		return cloudSetup()
+	case "2":
+		return true
 	default:
 		ui.Errf("unrecognized choice %q\n", ans)
 		return false

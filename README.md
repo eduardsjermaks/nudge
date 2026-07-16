@@ -1,8 +1,9 @@
 # nudge
 
-Type the command you *meant*. A local LLM figures it out; you confirm; it runs.
-Use the local LLM by default, or configure a cloud provider when that better
-fits your setup. See [Choosing a brain](#choosing-a-brain).
+Type the command you *meant*. An LLM figures it out; you confirm; it runs.
+Use a cloud provider (recommended — best quality, no local install), or run a
+local model when privacy or cost matters more. See
+[Choosing a brain](#choosing-a-brain).
 
 ```
 PS> undo last commit
@@ -67,26 +68,20 @@ from source: `go build ./cmd/nudge` — no CGO, no exotic deps.
 nudge setup
 ```
 
-It checks every piece and offers to fix what's missing: installs and starts
-Ollama (or configures a cloud provider instead), pulls the model, adds the
-shell integration, and finishes with `nudge doctor`. Every change asks for
-confirmation first, and it is safe to re-run any time. If it ends with
-"all good." you are done — the rest of this section is the manual
+It checks every piece and offers to fix what's missing: configures a cloud
+provider (or installs and starts Ollama and pulls the model, if you prefer
+local), adds the shell integration, and finishes with `nudge doctor`. Every
+change asks for confirmation first, and it is safe to re-run any time. If it
+ends with "all good." you are done — the rest of this section is the manual
 equivalent.
 
 **3. Manual alternative: pick a model** — skip if the wizard did this. One
 of the two, see [Choosing a brain](#choosing-a-brain) for the tradeoffs:
 
-**3a. Local model server** (default, recommended — private, free per query) —
-[Ollama](https://ollama.com/download):
-
-```
-ollama pull qwen2.5-coder:1.5b
-```
-
-**3b. Cloud model** (no ~1 GB download or RAM cost; needs an API key, queries
-leave your machine) — two steps: name the provider in the config file, then
-put the API key in an environment variable. Using Anthropic as the example:
+**3a. Cloud model** (recommended — best quality, no ~1 GB download or RAM
+cost; needs an API key, queries leave your machine) — two steps: name the
+provider in the config file, then put the API key in an environment variable.
+Using Anthropic as the example:
 
 *Create the config file.* nudge never creates it for you — the directory has
 to exist. Locations differ per platform (`nudge doctor` prints the exact one):
@@ -125,6 +120,13 @@ Then run `nudge doctor` to confirm the key and endpoint work. OpenAI, Azure
 OpenAI, and DeepSeek are configured the same way — see
 [Per-provider setup](#per-provider-setup) for their config keys, and
 [Credentials](#credentials) for alternatives to a plain environment variable.
+
+**3b. Local model server** (private, free per query — nothing leaves your
+machine) — [Ollama](https://ollama.com/download), no config file needed:
+
+```
+ollama pull qwen2.5-coder:1.5b
+```
 
 **4. Manual alternative: add the shell integration** — skip if the wizard
 did this. Optional but recommended: it enables bare `nudge` / `fix` and the
@@ -376,12 +378,14 @@ it took.
 Tier 1 (typo fixes) never involves a model. For everything else, pick one
 provider — exactly one is active at a time, selected in the config:
 
-- **Local (default, recommended):** private, free per query, ~1 GB model
-  download, needs Ollama (or any OpenAI-compatible local server). Nothing
-  leaves your machine.
-- **Cloud (opt-in):** no local install or RAM cost, needs an API key,
-  **your queries leave your machine** and are subject to the provider's data
-  policy. Supported: OpenAI, Azure OpenAI, Anthropic (Claude), DeepSeek.
+- **Cloud (recommended):** best suggestion quality, no local install or RAM
+  cost, needs an API key; **your queries leave your machine** and are subject
+  to the provider's data policy. Supported: OpenAI, Azure OpenAI, Anthropic
+  (Claude), DeepSeek.
+- **Local:** private, free per query, ~1 GB model download, needs Ollama (or
+  any OpenAI-compatible local server). Nothing leaves your machine — the
+  right choice when privacy or per-query cost matters more than quality.
+  This is the built-in default when no config file exists.
 
 There is **no fallback between them**: if your chosen provider is down, nudge
 degrades to Tier 1 — it never silently switches to a cloud key it happens to
