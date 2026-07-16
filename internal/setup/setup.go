@@ -56,10 +56,18 @@ func Run() int {
 			ui.Bold(cfg.Provider), config.Path())
 	}
 
-	ensureIntegration()
+	reload := ensureIntegration()
 
 	ui.Errf("\nchecking the result (%s):\n", ui.Bold("nudge doctor"))
-	return doctor.Run()
+	code := doctor.Run()
+
+	if reload != "" {
+		ui.Errf("\n%s the shell hook was added to your profile, but this session\n", ui.Bold("one last step:"))
+		ui.Errf("started without it — misspelled commands won't be caught here yet. Run:\n")
+		ui.Errf("  %s\n", ui.Bold(reload))
+		ui.Errf("or open a new terminal.\n")
+	}
+	return code
 }
 
 // chooseBrain runs only when no config file exists yet. Local is the default

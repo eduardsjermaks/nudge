@@ -25,21 +25,23 @@ type integration struct {
 
 // ensureIntegration offers to add the shell hook (bare `nudge` / `fix`,
 // command-not-found catch) to the user's rc file. Idempotent: an existing
-// hook is detected and left alone.
-func ensureIntegration() {
+// hook is detected and left alone. Returns the reload command when the hook
+// was added just now — the running session started without it, so the caller
+// must surface the reload step at the very end of the wizard.
+func ensureIntegration() (reload string) {
 	integ, err := detectIntegration()
 	if err != nil {
 		ui.Errf("  shell integration: %v — see the README for manual steps.\n", err)
-		return
+		return ""
 	}
 	present, err := fileContains(integ.rc, integrationMarker)
 	if err != nil {
 		ui.Errf("  shell integration: cannot read %s: %v\n", integ.rc, err)
-		return
+		return ""
 	}
 	if present {
 		ui.Errf("  %s shell integration already present in %s\n", ui.Cyan("ok"), integ.rc)
-		return
+		return ""
 	}
 
 	ui.Errf("  Shell integration enables bare %s / %s after a failed command\n", ui.Bold("nudge"), ui.Bold("fix"))
@@ -48,13 +50,14 @@ func ensureIntegration() {
 	yes, err := ui.AskYesNo(fmt.Sprintf("  Add it to %s?", integ.rc), true)
 	if err != nil || !yes {
 		ui.Errf("  skipped.\n")
-		return
+		return ""
 	}
 	if err := appendLine(integ.rc, integ.line); err != nil {
 		ui.Errf("  failed to update %s: %v\n", integ.rc, err)
-		return
+		return ""
 	}
-	ui.Errf("  %s added — activate with %s or open a new terminal\n", ui.Cyan("ok"), ui.Bold(integ.reload))
+	ui.Errf("  %s added\n", ui.Cyan("ok"))
+	return integ.reload
 }
 
 func detectIntegration() (*integration, error) {
