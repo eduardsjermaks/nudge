@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"time"
 
@@ -59,13 +61,13 @@ func ensureOllama(cfg config.Config) {
 // exists, otherwise offer the platform installer. Returns true when the
 // server ends up reachable.
 func startOrInstall(cfg config.Config) bool {
-	if _, err := exec.LookPath("ollama"); err == nil {
+	if exe, found := ollamaExe(); found {
 		ui.Errf("  Ollama is installed but the server is not responding at %s.\n", cfg.Endpoint)
 		yes, err := ui.AskYesNo("  Start it now (runs `ollama serve` in the background)?", true)
 		if err != nil || !yes {
 			return false
 		}
-		if err := startServer(); err != nil {
+		if err := startServer(exe); err != nil {
 			ui.Errf("  failed to start the server: %v\n", err)
 			return false
 		}
@@ -93,12 +95,14 @@ func startOrInstall(cfg config.Config) bool {
 	}
 
 	// This process's PATH was fixed at startup, so a fresh install may be
-	// invisible here even though it succeeded (typical for winget).
-	if _, err := exec.LookPath("ollama"); err != nil {
-		if waitUp(cfg.Endpoint, 10*time.Second) {
+	// invisible on PATH even though it succeeded (typical for winget) —
+	// ollamaExe also checks the platform's default install locations.
+	exe, found := ollamaExe()
+	if !found {
+		if waitUp(cfg.Endpoint, 30*time.Second) {
 			return true // the installer started a service; good enough
 		}
-		ui.Errf("  installed, but this terminal's PATH does not see it yet —\n")
+		ui.Errf("  installed, but nudge can neither find the binary nor reach the server —\n")
 		ui.Errf("  open a new terminal and run `nudge setup` again.\n")
 		return false
 	}
@@ -106,11 +110,43 @@ func startOrInstall(cfg config.Config) bool {
 		ui.Errf("  %s server is up\n", ui.Cyan("ok"))
 		return true
 	}
-	if err := startServer(); err != nil {
+	if err := startServer(exe); err != nil {
 		ui.Errf("  could not start the server: %v\n", err)
 		return false
 	}
 	return waitUp(cfg.Endpoint, 20*time.Second)
+}
+
+// ollamaExe resolves the ollama binary: PATH first, then the platform's
+// default install locations — right after an install this process's PATH
+// predates the binary (typical for winget), which used to dead-end the
+// wizard on Windows before the model was ever pulled.
+func ollamaExe() (string, bool) {
+	if p, err := exec.LookPath("ollama"); err == nil {
+		return p, true
+	}
+	for _, c := range ollamaCandidates(runtime.GOOS, os.Getenv("LOCALAPPDATA")) {
+		if _, err := os.Stat(c); err == nil {
+			return c, true
+		}
+	}
+	return "", false
+}
+
+// ollamaCandidates lists default install locations per platform. Pure so
+// tests can cover the matrix.
+func ollamaCandidates(goos, localAppData string) []string {
+	switch goos {
+	case "windows":
+		if localAppData == "" {
+			return nil
+		}
+		return []string{filepath.Join(localAppData, "Programs", "Ollama", "ollama.exe")}
+	case "darwin":
+		return []string{"/opt/homebrew/bin/ollama", "/usr/local/bin/ollama"}
+	default:
+		return []string{"/usr/local/bin/ollama", "/usr/bin/ollama"}
+	}
 }
 
 // installCommand returns the install command for the platform, or "" plus a
@@ -136,8 +172,8 @@ func hasBrew() bool {
 
 // startServer launches `ollama serve` detached, so it survives nudge exiting
 // and ignores the terminal's Ctrl+C.
-func startServer() error {
-	cmd := exec.Command("ollama", "serve")
+func startServer(exe string) error {
+	cmd := exec.Command(exe, "serve")
 	cmd.SysProcAttr = detachAttrs()
 	if err := cmd.Start(); err != nil {
 		return err

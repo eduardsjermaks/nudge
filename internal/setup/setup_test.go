@@ -33,6 +33,29 @@ func TestInstallCommand(t *testing.T) {
 	}
 }
 
+func TestOllamaCandidates(t *testing.T) {
+	lad := filepath.Join("C:", "Users", "u", "AppData", "Local")
+	got := ollamaCandidates("windows", lad)
+	want := filepath.Join(lad, "Programs", "Ollama", "ollama.exe")
+	if len(got) != 1 || got[0] != want {
+		t.Errorf("windows candidates = %v, want [%s]", got, want)
+	}
+	if got := ollamaCandidates("windows", ""); got != nil {
+		t.Errorf("windows without LOCALAPPDATA must have no candidates, got %v", got)
+	}
+	for _, goos := range []string{"darwin", "linux"} {
+		cands := ollamaCandidates(goos, "")
+		if len(cands) == 0 {
+			t.Errorf("%s must have candidates", goos)
+		}
+		for _, c := range cands {
+			if !strings.HasSuffix(c, "/ollama") {
+				t.Errorf("%s candidate %q does not end in /ollama", goos, c)
+			}
+		}
+	}
+}
+
 func TestHasModel(t *testing.T) {
 	models := []string{"llama3:8b", "qwen2.5-coder:1.5b", "mistral:latest"}
 	if !hasModel(models, "qwen2.5-coder:1.5b") {
