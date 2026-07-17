@@ -18,6 +18,12 @@ import (
 	"nudge/internal/ui"
 )
 
+// serverStartTimeout is the give-up ceiling after launching `ollama serve` —
+// waitUp polls every 500 ms and returns as soon as the server answers, so
+// only a failed start ever waits this long. Generous because a cold start on
+// a slow disk (or the desktop app's first launch) can take well over 20 s.
+const serverStartTimeout = 2 * time.Minute
+
 // ensureOllama gets the local provider to a working state: server reachable,
 // model pulled. Best-effort — failures are reported and left for the closing
 // doctor run to diagnose in detail.
@@ -71,7 +77,7 @@ func startOrInstall(cfg config.Config) bool {
 			ui.Errf("  failed to start the server: %v\n", err)
 			return false
 		}
-		return waitUp(cfg.Endpoint, 20*time.Second)
+		return waitUp(cfg.Endpoint, serverStartTimeout)
 	}
 
 	cmd, note := installCommand(runtime.GOOS, hasBrew())
@@ -114,7 +120,7 @@ func startOrInstall(cfg config.Config) bool {
 		ui.Errf("  could not start the server: %v\n", err)
 		return false
 	}
-	return waitUp(cfg.Endpoint, 20*time.Second)
+	return waitUp(cfg.Endpoint, serverStartTimeout)
 }
 
 // ollamaExe resolves the ollama binary: PATH first, then the platform's
