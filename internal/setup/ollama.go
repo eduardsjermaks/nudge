@@ -29,7 +29,7 @@ const serverStartTimeout = 2 * time.Minute
 // doctor run to diagnose in detail.
 func ensureOllama(cfg config.Config) {
 	if !serverUp(cfg.Endpoint) {
-		if !startOrInstall(cfg) {
+		if !startOrInstall(cfg) && !cliPullFallback(cfg) {
 			ui.Errf("  skipping the model check — the server is not reachable.\n")
 			return
 		}
@@ -112,6 +112,11 @@ func startOrInstall(cfg config.Config) bool {
 		ui.Errf("  open a new terminal and run `nudge setup` again.\n")
 		return false
 	}
+	if _, err := exec.LookPath("ollama"); err != nil && runtime.GOOS == "windows" {
+		ui.Errf("  note: `ollama` is not on this terminal's PATH yet (new terminals will have\n")
+		ui.Errf("  it) — nudge uses the full path meanwhile. For this terminal:\n")
+		ui.Errf("    $env:Path += ';%s'\n", filepath.Dir(exe))
+	}
 	if serverUp(cfg.Endpoint) {
 		ui.Errf("  %s server is up\n", ui.Cyan("ok"))
 		return true
@@ -176,9 +181,23 @@ func hasBrew() bool {
 	return err == nil
 }
 
-// startServer launches `ollama serve` detached, so it survives nudge exiting
-// and ignores the terminal's Ctrl+C.
+// startServer launches the server detached, so it survives nudge exiting and
+// ignores the terminal's Ctrl+C. On Windows the desktop app ("ollama
+// app.exe", installed next to the CLI) manages the server far more reliably
+// than a bare `ollama serve` right after a fresh install — the CLI itself
+// launches the app when the server is down — so prefer it when present.
 func startServer(exe string) error {
+	if runtime.GOOS == "windows" {
+		app := filepath.Join(filepath.Dir(exe), "ollama app.exe")
+		if _, err := os.Stat(app); err == nil {
+			cmd := exec.Command(app)
+			cmd.SysProcAttr = detachAttrs()
+			if err := cmd.Start(); err == nil {
+				go cmd.Wait()
+				return nil
+			}
+		}
+	}
 	cmd := exec.Command(exe, "serve")
 	cmd.SysProcAttr = detachAttrs()
 	if err := cmd.Start(); err != nil {
@@ -186,6 +205,32 @@ func startServer(exe string) error {
 	}
 	go cmd.Wait() // reap if it dies while the wizard is still running
 	return nil
+}
+
+// cliPullFallback is the last resort when the HTTP API never became
+// reachable: running the pull through the CLI, which (on Windows) starts the
+// server itself when the API is down — so it can succeed where every direct
+// API attempt failed. The pull doubles as the model download, so on success
+// the wizard's model check finds everything already in place.
+func cliPullFallback(cfg config.Config) bool {
+	exe, found := ollamaExe()
+	if !found {
+		return false
+	}
+	ui.Errf("  One more thing to try: the ollama CLI can start the server itself.\n")
+	yes, err := ui.AskYesNo(fmt.Sprintf("  Run `ollama pull %s` (~1 GB download)?", cfg.Model), true)
+	if err != nil || !yes {
+		return false
+	}
+	cmd := exec.Command(exe, "pull", cfg.Model)
+	cmd.Stdout = os.Stderr // the wizard talks on stderr; keep pull progress visible
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	if err := cmd.Run(); err != nil {
+		ui.Errf("  pull failed: %v\n", err)
+		return false
+	}
+	return serverUp(cfg.Endpoint) || waitUp(cfg.Endpoint, 15*time.Second)
 }
 
 func waitUp(endpoint string, max time.Duration) bool {
