@@ -509,15 +509,49 @@ What leaves your machine depends entirely on which provider *you* configured:
 
 ## Uninstall
 
-1. Remove the init line from your shell profile.
-2. Delete the binary — `%LOCALAPPDATA%\Programs\nudge` (Windows) or
-   `~/.local/bin/nudge` / `/usr/local/bin/nudge` (Linux/macOS) if you used an
-   install script — and remove the PATH entry you added for it.
-3. Delete config and cache: `%APPDATA%\nudge` + `%LOCALAPPDATA%\nudge`
-   (Windows), `~/.config/nudge` + `~/.cache/nudge` (Linux),
-   `~/Library/Application Support/nudge` + `~/Library/Caches/nudge` (macOS).
-4. If you installed Ollama only for this: `ollama rm qwen2.5-coder:1.5b` and
-   uninstall Ollama.
+Three steps everywhere: remove the shell-integration line, delete the binary
+(and the PATH entry the installer added), delete config + cache. Run the
+block for your platform, then open a new terminal.
+
+```powershell
+# Windows (PowerShell)
+(Get-Content $PROFILE) | Where-Object { $_ -notmatch 'nudge init' } | Set-Content $PROFILE
+$dest = "$env:LOCALAPPDATA\Programs\nudge"
+Remove-Item -Recurse -Force $dest
+$p = [Environment]::GetEnvironmentVariable('Path', 'User')
+[Environment]::SetEnvironmentVariable('Path', (($p -split ';' | Where-Object { $_ -and $_ -ne $dest }) -join ';'), 'User')
+Remove-Item -Recurse -Force "$env:APPDATA\nudge", "$env:LOCALAPPDATA\nudge" -ErrorAction SilentlyContinue
+```
+
+```bash
+# Linux — rc file: ~/.bashrc here; ~/.zshrc, ~/.profile, or
+# ~/.config/fish/config.fish if that is where you added the init line
+sed -i '/nudge init/d' ~/.bashrc
+rm -f ~/.local/bin/nudge /usr/local/bin/nudge
+rm -rf ~/.config/nudge ~/.cache/nudge
+```
+
+```bash
+# macOS — same rc-file note as Linux; BSD sed needs -i ''
+sed -i '' '/nudge init/d' ~/.zshrc
+rm -f ~/.local/bin/nudge /usr/local/bin/nudge
+rm -rf ~/Library/Application\ Support/nudge ~/Library/Caches/nudge
+```
+
+If the installer told you to add `~/.local/bin` to your PATH, that line is
+safe to keep — many other tools install there too.
+
+If you installed Ollama only for nudge, remove the model and the app:
+
+```
+ollama rm qwen2.5-coder:1.5b
+```
+
+then `winget uninstall Ollama.Ollama` (Windows), `brew uninstall ollama`
+(macOS/Homebrew), or Ollama's own
+[uninstall steps](https://github.com/ollama/ollama/blob/main/docs/linux.md#uninstall)
+(Linux). Downloaded models live in `~/.ollama` — delete that too if you want
+the disk space back.
 
 ## Development
 
