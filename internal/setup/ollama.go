@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"nudge/internal/config"
@@ -181,30 +182,105 @@ func hasBrew() bool {
 	return err == nil
 }
 
-// startServer launches the server detached, so it survives nudge exiting and
-// ignores the terminal's Ctrl+C. On Windows the desktop app ("ollama
-// app.exe", installed next to the CLI) manages the server far more reliably
-// than a bare `ollama serve` right after a fresh install — the CLI itself
-// launches the app when the server is down — so prefer it when present.
+// startServer launches `ollama serve` detached, so it survives nudge exiting
+// and ignores the terminal's Ctrl+C. Deliberately the bare serve subcommand,
+// NOT the desktop app ("ollama app.exe"): launching the app detached can
+// leave a half-alive tray instance that blocks the CLI from ever starting
+// the server again — observed on a fresh Windows VM.
 func startServer(exe string) error {
-	if runtime.GOOS == "windows" {
-		app := filepath.Join(filepath.Dir(exe), "ollama app.exe")
-		if _, err := os.Stat(app); err == nil {
-			cmd := exec.Command(app)
-			cmd.SysProcAttr = detachAttrs()
-			if err := cmd.Start(); err == nil {
-				go cmd.Wait()
-				return nil
-			}
-		}
-	}
 	cmd := exec.Command(exe, "serve")
 	cmd.SysProcAttr = detachAttrs()
+	var logf *os.File
+	if f, err := os.Create(serveLogPath()); err == nil {
+		cmd.Stdout = f
+		cmd.Stderr = f
+		logf = f
+	}
 	if err := cmd.Start(); err != nil {
+		if logf != nil {
+			logf.Close()
+		}
 		return err
 	}
-	go cmd.Wait() // reap if it dies while the wizard is still running
+	go func() { // reap if it dies while the wizard is still running
+		cmd.Wait()
+		if logf != nil {
+			logf.Close()
+		}
+	}()
 	return nil
+}
+
+// serveLogPath is where startServer captures `ollama serve` output — the
+// process is detached, so without this a crashing server is invisible.
+func serveLogPath() string {
+	return filepath.Join(os.TempDir(), "nudge-ollama-serve.log")
+}
+
+// showServerLog prints the tail of the freshest server log after a failed
+// start, so the user sees the actual error instead of just "did not come
+// up". The desktop app writes its own logs under %LOCALAPPDATA%\Ollama.
+func showServerLog() {
+	candidates := []string{serveLogPath()}
+	if runtime.GOOS == "windows" {
+		if lad := os.Getenv("LOCALAPPDATA"); lad != "" {
+			candidates = append(candidates,
+				filepath.Join(lad, "Ollama", "server.log"),
+				filepath.Join(lad, "Ollama", "app.log"))
+		}
+	}
+	var best string
+	var bestT time.Time
+	for _, p := range candidates {
+		if st, err := os.Stat(p); err == nil && st.Size() > 0 && st.ModTime().After(bestT) {
+			best, bestT = p, st.ModTime()
+		}
+	}
+	if best == "" {
+		return
+	}
+	lines := tailLines(best, 10)
+	if len(lines) == 0 {
+		return
+	}
+	ui.Errf("  the server's last words (%s):\n", best)
+	for _, l := range lines {
+		ui.Errf("    %s\n", l)
+	}
+}
+
+// tailLines returns up to n trailing lines of a file, reading at most the
+// last 8 KB so growing logs stay cheap.
+func tailLines(path string, n int) []string {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	st, err := f.Stat()
+	if err != nil || st.Size() == 0 {
+		return nil
+	}
+	const chunk = 8192
+	off := st.Size() - chunk
+	if off < 0 {
+		off = 0
+	}
+	buf := make([]byte, st.Size()-off)
+	if _, err := f.ReadAt(buf, off); err != nil && err != io.EOF {
+		return nil
+	}
+	lines := strings.Split(strings.TrimRight(string(buf), "\r\n"), "\n")
+	if off > 0 && len(lines) > 1 {
+		lines = lines[1:] // first line is probably cut mid-way
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	for i := range lines {
+		lines[i] = strings.TrimRight(lines[i], "\r")
+	}
+	return lines
 }
 
 // cliPullFallback is the last resort when the HTTP API never became
@@ -218,7 +294,7 @@ func cliPullFallback(cfg config.Config) bool {
 		return false
 	}
 	ui.Errf("  One more thing to try: the ollama CLI can start the server itself.\n")
-	yes, err := ui.AskYesNo(fmt.Sprintf("  Run `ollama pull %s` (~1 GB download)?", cfg.Model), true)
+	yes, err := ui.AskYesNo(fmt.Sprintf("  Run `%s pull %s` (~1 GB download)?", exe, cfg.Model), true)
 	if err != nil || !yes {
 		return false
 	}
@@ -246,6 +322,7 @@ func waitUp(endpoint string, max time.Duration) bool {
 	}
 	sp.Stop()
 	ui.Errf("  the server did not come up within %s\n", max)
+	showServerLog()
 	return false
 }
 

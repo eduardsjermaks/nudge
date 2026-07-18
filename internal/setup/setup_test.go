@@ -56,6 +56,21 @@ func TestOllamaCandidates(t *testing.T) {
 	}
 }
 
+func TestTailLines(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "log")
+	if got := tailLines(p, 5); got != nil {
+		t.Errorf("missing file: got %v", got)
+	}
+	os.WriteFile(p, []byte("one\ntwo\r\nthree\nfour\n"), 0o644)
+	got := tailLines(p, 2)
+	if len(got) != 2 || got[0] != "three" || got[1] != "four" {
+		t.Errorf("tail 2: got %v", got)
+	}
+	if got := tailLines(p, 10); len(got) != 4 || got[1] != "two" {
+		t.Errorf("tail beyond length must return all lines, CRLF stripped: %v", got)
+	}
+}
+
 func TestPolicyBlocksProfiles(t *testing.T) {
 	for _, pol := range []string{"Restricted", "AllSigned", "Undefined"} {
 		if !policyBlocksProfiles(pol) {
