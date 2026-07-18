@@ -21,6 +21,7 @@ type integration struct {
 	rc     string // absolute path of the rc/profile file
 	line   string // the line to append
 	reload string // command the user runs to activate it now
+	psExe  string // PowerShell executable; set only for the PowerShell hook
 }
 
 // ensureIntegration offers to add the shell hook (bare `nudge` / `fix`,
@@ -34,6 +35,13 @@ func ensureIntegration() (reload string) {
 		ui.Errf("  shell integration: %v — see the README for manual steps.\n", err)
 		return ""
 	}
+	// A restrictive execution policy silently defeats the whole hook: the
+	// profile line gets added but every new session errors instead of
+	// loading it. Fix that first.
+	if integ.psExe != "" {
+		ensurePSPolicy(integ.psExe)
+	}
+
 	present, err := fileContains(integ.rc, integrationMarker)
 	if err != nil {
 		ui.Errf("  shell integration: cannot read %s: %v\n", integ.rc, err)
@@ -67,7 +75,7 @@ func detectIntegration() (*integration, error) {
 	}
 	switch sh := prompt.ShellName(); sh {
 	case "powershell", "cmd": // cmd users get the PowerShell hook, same as initHint
-		profile, err := pwshProfile()
+		profile, exe, err := pwshProfile()
 		if err != nil {
 			return nil, fmt.Errorf("cannot determine $PROFILE: %v", err)
 		}
@@ -75,6 +83,7 @@ func detectIntegration() (*integration, error) {
 			rc:     profile,
 			line:   "Invoke-Expression (& nudge init pwsh | Out-String)",
 			reload: ". $PROFILE",
+			psExe:  exe,
 		}, nil
 	case "zsh":
 		return &integration{
@@ -101,16 +110,17 @@ func detectIntegration() (*integration, error) {
 
 // pwshProfile asks PowerShell itself for $PROFILE — the path depends on the
 // PowerShell edition (5.1 vs 7) and on Documents redirection (OneDrive), so
-// computing it from Go would guess wrong.
-func pwshProfile() (string, error) {
+// computing it from Go would guess wrong. Also returns which executable
+// answered, so later checks (execution policy) talk to the same edition.
+func pwshProfile() (profile, psExe string, err error) {
 	// PS7 puts ...\PowerShell\7\Modules on PSModulePath; 5.1 never does.
 	exes := []string{"powershell", "pwsh"}
 	if strings.Contains(strings.ToLower(os.Getenv("PSModulePath")), `\powershell\7\`) {
 		exes = []string{"pwsh", "powershell"}
 	}
-	var lastErr error = errors.New("no PowerShell executable found")
-	for _, exe := range exes {
-		out, err := exec.Command(exe, "-NoProfile", "-Command", "Write-Output $PROFILE").Output()
+	lastErr := errors.New("no PowerShell executable found")
+	for _, e := range exes {
+		out, err := exec.Command(e, "-NoProfile", "-Command", "Write-Output $PROFILE").Output()
 		if err != nil {
 			lastErr = err
 			continue
@@ -118,10 +128,50 @@ func pwshProfile() (string, error) {
 		// PowerShell 5.1 may emit a UTF-8 BOM on redirected output.
 		p := strings.TrimSpace(strings.TrimPrefix(string(out), "\ufeff"))
 		if p != "" {
-			return p, nil
+			return p, e, nil
 		}
 	}
-	return "", lastErr
+	return "", "", lastErr
+}
+
+// ensurePSPolicy offers to relax a PowerShell execution policy that would
+// block profile scripts. Windows PowerShell 5.1 ships Restricted on client
+// machines, so without this a fresh install errors with UnauthorizedAccess
+// on every new session once the profile line exists.
+func ensurePSPolicy(exe string) {
+	out, err := exec.Command(exe, "-NoProfile", "-Command", "Get-ExecutionPolicy").Output()
+	if err != nil {
+		return
+	}
+	pol := strings.TrimSpace(strings.TrimPrefix(string(out), "\ufeff"))
+	if !policyBlocksProfiles(pol) {
+		return
+	}
+	ui.Errf("  PowerShell's execution policy is %s — it blocks profile scripts, so\n", ui.Bold(pol))
+	ui.Errf("  the integration cannot load (\"running scripts is disabled\" errors).\n")
+	ui.Errf("  RemoteSigned allows local scripts and is Microsoft's recommended default.\n")
+	yes, err := ui.AskYesNo("  Set it for your user account (Set-ExecutionPolicy -Scope CurrentUser RemoteSigned)?", true)
+	if err != nil || !yes {
+		ui.Errf("  skipped — the integration will not load until you run:\n")
+		ui.Errf("    Set-ExecutionPolicy -Scope CurrentUser RemoteSigned\n")
+		return
+	}
+	if err := exec.Command(exe, "-NoProfile", "-Command",
+		"Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned -Force").Run(); err != nil {
+		ui.Errf("  failed to set it (a group policy may enforce the current value): %v\n", err)
+		return
+	}
+	ui.Errf("  %s execution policy set to RemoteSigned for your user\n", ui.Cyan("ok"))
+}
+
+// policyBlocksProfiles reports whether an effective execution policy stops
+// $PROFILE from loading. Pure so tests can cover the matrix.
+func policyBlocksProfiles(policy string) bool {
+	switch policy {
+	case "Restricted", "AllSigned", "Undefined":
+		return true
+	}
+	return false
 }
 
 func fileContains(path, needle string) (bool, error) {

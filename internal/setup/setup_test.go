@@ -56,6 +56,19 @@ func TestOllamaCandidates(t *testing.T) {
 	}
 }
 
+func TestPolicyBlocksProfiles(t *testing.T) {
+	for _, pol := range []string{"Restricted", "AllSigned", "Undefined"} {
+		if !policyBlocksProfiles(pol) {
+			t.Errorf("%s must count as blocking", pol)
+		}
+	}
+	for _, pol := range []string{"RemoteSigned", "Unrestricted", "Bypass"} {
+		if policyBlocksProfiles(pol) {
+			t.Errorf("%s must not count as blocking", pol)
+		}
+	}
+}
+
 func TestHasModel(t *testing.T) {
 	models := []string{"llama3:8b", "qwen2.5-coder:1.5b", "mistral:latest"}
 	if !hasModel(models, "qwen2.5-coder:1.5b") {

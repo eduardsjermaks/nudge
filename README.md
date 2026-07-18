@@ -214,6 +214,15 @@ Get-Command nudge
    Get-Command nudge
    ```
 
+   Also make sure profile scripts are allowed to run — a fresh Windows
+   install ships with execution policy `Restricted`, which makes every new
+   session fail with "running scripts is disabled on this system" once a
+   profile exists (`nudge setup` detects this and offers the same fix):
+
+   ```powershell
+   Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+   ```
+
 2. Create your PowerShell profile if it does not already exist. The
    `Test-Path` guard matters: `New-Item -Force` on its own **empties an
    existing profile**.
