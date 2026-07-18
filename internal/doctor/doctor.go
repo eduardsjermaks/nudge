@@ -44,6 +44,9 @@ func Run() int {
 	}
 	if prov.KeyEnv != "" {
 		ui.Errf("  api key: %s\n", prov.KeyStatus())
+		if prov.KeySource == "config file" {
+			ui.Errf("  %s\n", ui.Dim("note: key stored in the config file; the "+prov.KeyEnv+" env var, if set, overrides it"))
+		}
 	}
 	if err := prov.KeyError(); err != nil {
 		fail("%v", err)

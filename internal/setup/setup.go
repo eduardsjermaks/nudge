@@ -92,22 +92,29 @@ func chooseBrain() bool {
 	}
 }
 
-// cloudSetup writes a minimal config.toml for a cloud provider. It never
-// asks for the key itself — the documented, preferred place for credentials
-// is the provider's standard environment variable.
+// cloudProviders maps each provider to its standard credential env var and
+// the portal page where a key is created.
+var cloudProviders = map[string]struct {
+	keyEnv string
+	portal string
+}{
+	"openai":    {"OPENAI_API_KEY", "https://platform.openai.com/api-keys"},
+	"anthropic": {"ANTHROPIC_API_KEY", "https://console.anthropic.com/settings/keys"},
+	"deepseek":  {"DEEPSEEK_API_KEY", "https://platform.deepseek.com/api_keys"},
+	"azure":     {"AZURE_OPENAI_API_KEY", "https://portal.azure.com — your Azure OpenAI resource, \"Keys and Endpoint\""},
+}
+
+// cloudSetup writes a minimal config.toml for a cloud provider. The
+// provider's standard env var is checked first; when it is not set, the
+// wizard offers to store a pasted key as api_key in the config file (kept
+// private via 0600 on POSIX; the env var still overrides it).
 func cloudSetup() bool {
-	keyEnvs := map[string]string{
-		"openai":    "OPENAI_API_KEY",
-		"anthropic": "ANTHROPIC_API_KEY",
-		"deepseek":  "DEEPSEEK_API_KEY",
-		"azure":     "AZURE_OPENAI_API_KEY",
-	}
 	name, err := ui.Ask("Which provider? [openai/anthropic/deepseek/azure]:")
 	if err != nil {
 		return false
 	}
 	name = strings.ToLower(name)
-	keyEnv, ok := keyEnvs[name]
+	p, ok := cloudProviders[name]
 	if !ok {
 		ui.Errf("unknown provider %q\n", name)
 		return false
@@ -128,26 +135,46 @@ func cloudSetup() bool {
 			fmt.Sprintf("azure_deployment = %q", dep))
 	}
 
+	keyStored := false
+	if os.Getenv(p.keyEnv) == "" {
+		ui.Errf("  %s needs an API key (read from the %s env variable).\n", ui.Bold(name), ui.Bold(p.keyEnv))
+		ui.Errf("  Create or copy one here:\n")
+		ui.Errf("    %s\n", ui.Bold(p.portal))
+		ui.Errf("  Paste it below to save it in nudge's config file (readable only by\n")
+		ui.Errf("  you), or press Enter to skip and set %s yourself later.\n", p.keyEnv)
+		key, err := ui.Ask("API key (Enter = skip):")
+		if err != nil {
+			return false
+		}
+		if key = strings.TrimSpace(key); key != "" {
+			lines = append(lines, fmt.Sprintf("api_key = %q", key))
+			keyStored = true
+		}
+	}
+
 	path := config.Path()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		ui.Errf("cannot create %s: %v\n", filepath.Dir(path), err)
 		return false
 	}
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
 		ui.Errf("cannot write %s: %v\n", path, err)
 		return false
 	}
 	ui.Errf("  %s wrote %s\n", ui.Cyan("ok"), path)
 
-	if os.Getenv(keyEnv) != "" {
-		ui.Errf("  %s %s is already set in this environment\n", ui.Cyan("ok"), keyEnv)
-	} else {
-		ui.Errf("  now set your API key in the %s environment variable:\n", ui.Bold(keyEnv))
+	switch {
+	case keyStored:
+		ui.Errf("  %s API key saved (setting the %s env variable later would override it)\n", ui.Cyan("ok"), p.keyEnv)
+	case os.Getenv(p.keyEnv) != "":
+		ui.Errf("  %s %s is already set in this environment\n", ui.Cyan("ok"), p.keyEnv)
+	default:
+		ui.Errf("  skipped — set your API key in the %s environment variable:\n", ui.Bold(p.keyEnv))
 		if runtime.GOOS == "windows" {
-			ui.Errf("    [Environment]::SetEnvironmentVariable('%s', '<your key>', 'User')\n", keyEnv)
+			ui.Errf("    [Environment]::SetEnvironmentVariable('%s', '<your key>', 'User')\n", p.keyEnv)
 			ui.Errf("    (then open a new terminal and re-run `nudge doctor`)\n")
 		} else {
-			ui.Errf("    export %s='<your key>'   # add to your shell rc to persist\n", keyEnv)
+			ui.Errf("    export %s='<your key>'   # add to your shell rc to persist\n", p.keyEnv)
 		}
 	}
 	return true

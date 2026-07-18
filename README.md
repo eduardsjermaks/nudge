@@ -69,8 +69,10 @@ nudge setup
 ```
 
 It checks every piece and offers to fix what's missing: configures a cloud
-provider (or installs and starts Ollama and pulls the model, if you prefer
-local), adds the shell integration, and finishes with `nudge doctor`. Every
+provider — linking to the provider's key page and storing a pasted API key
+privately in the config file — (or installs and starts Ollama and pulls the
+model, if you prefer local), adds the shell integration, and finishes with
+`nudge doctor`. Every
 change asks for confirmation first, and it is safe to re-run any time. If it
 ends with "all good." you are done — the rest of this section is the manual
 equivalent.
@@ -397,25 +399,30 @@ fractions of a cent per correction — and Tier-1 fixes cost nothing.
 
 ### Per-provider setup
 
-**OpenAI** (default model `gpt-5-mini`):
+**OpenAI** (default model `gpt-5-mini`) — create a key at
+<https://platform.openai.com/api-keys>:
 
 ```toml
 provider = "openai"          # key from OPENAI_API_KEY
 ```
 
-**Anthropic** (default model `claude-haiku-4-5`):
+**Anthropic** (default model `claude-haiku-4-5`) — create a key at
+<https://console.anthropic.com/settings/keys>:
 
 ```toml
 provider = "anthropic"       # key from ANTHROPIC_API_KEY
 ```
 
-**DeepSeek** (default model `deepseek-chat`):
+**DeepSeek** (default model `deepseek-chat`) — create a key at
+<https://platform.deepseek.com/api_keys>:
 
 ```toml
 provider = "deepseek"        # key from DEEPSEEK_API_KEY
 ```
 
-**Azure OpenAI** (no default possible — "model" is your deployment):
+**Azure OpenAI** (no default possible — "model" is your deployment) — the
+key is under your Azure OpenAI resource's "Keys and Endpoint" blade in the
+[Azure portal](https://portal.azure.com):
 
 ```toml
 provider = "azure"           # key from AZURE_OPENAI_API_KEY
@@ -442,10 +449,11 @@ and JSON output for the *active* provider, and measures warm latency.
 Resolved in this order: the provider's standard env var
 (`OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
 `DEEPSEEK_API_KEY`, `NUDGE_API_KEY` for custom) → `api_key_env = "SOME_VAR"`
-in the config → plaintext `api_key` in the config file (allowed but
-discouraged — nudge warns once and tightens the file to 0600 on
-Linux/macOS). Keys never appear in logs, errors, `--explain` output, or the
-doctor report (it shows only "present, ends …xxxx").
+in the config → `api_key` in the config file. The last is where
+`nudge setup` stores a pasted key; nudge tightens the file to 0600 on
+Linux/macOS, and the env var — if you set it later — always wins. Keys never
+appear in logs, errors, `--explain` output, or the doctor report (it shows
+only "present, ends …xxxx").
 
 ## Configuration (infrastructure only — there is no matching config)
 
@@ -464,7 +472,7 @@ timeout    = 30                          # (NUDGE_TIMEOUT) seconds, local provid
 timeout_ms = 8000                        # (NUDGE_TIMEOUT_MS) overrides timeout; cloud default is 8000
 confidence = 0.6                         # (NUDGE_CONFIDENCE) below this = "best guess" label
 # api_key_env = "SOME_VAR"               # indirection: read the key from this env var
-# api_key = "..."                        # plaintext key — discouraged, see Credentials
+# api_key = "..."                        # key in the file — `nudge setup` stores pasted keys here, see Credentials
 # allow_non_local = true                 # (NUDGE_ALLOW_NON_LOCAL) ollama/custom on another machine
 ```
 

@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os"
 	"runtime"
-	"sync"
 	"time"
 
 	"nudge/internal/config"
@@ -38,10 +37,11 @@ type Provider struct {
 	Protocol Protocol
 	BaseURL  string // base for building URLs; endpoint host for azure
 	Model    string
-	Cloud    bool   // requests leave the machine; secret masking applies
-	KeyEnv   string // standard env var for the credential ("" = none used)
-	APIKey   string // resolved credential ("" when absent)
-	Timeout  time.Duration
+	Cloud     bool   // requests leave the machine; secret masking applies
+	KeyEnv    string // standard env var for the credential ("" = none used)
+	APIKey    string // resolved credential ("" when absent)
+	KeySource string // where the credential came from: "env", "api_key_env", "config file", "" when absent
+	Timeout   time.Duration
 
 	azureDeployment string
 	azureAPIVersion string
@@ -105,11 +105,12 @@ func Resolve(cfg config.Config) (*Provider, error) {
 	default:
 		return nil, fmt.Errorf("unknown provider %q — valid values: ollama, openai, azure, anthropic, deepseek, custom", cfg.Provider)
 	}
-	key, err := resolveKey(cfg, p.KeyEnv)
+	key, source, err := resolveKey(cfg, p.KeyEnv)
 	if err != nil {
 		return nil, err
 	}
 	p.APIKey = key
+	p.KeySource = source
 	return p, nil
 }
 
@@ -204,33 +205,31 @@ func timeout(cfg config.Config, cloud bool) time.Duration {
 	return time.Duration(cfg.TimeoutSec) * time.Second
 }
 
-var plaintextWarnOnce sync.Once
-
 // resolveKey finds the credential, in priority order: the provider's
 // standard env var, then the env var named by api_key_env, then plaintext
-// api_key in the config file (discouraged: warned once, and the file is
-// tightened to 0600 on POSIX).
-func resolveKey(cfg config.Config, keyEnv string) (string, error) {
+// api_key in the config file (a supported place — `nudge setup` stores
+// pasted keys there, and the file is tightened to 0600 on POSIX).
+func resolveKey(cfg config.Config, keyEnv string) (key, source string, err error) {
 	if keyEnv != "" {
 		if v := os.Getenv(keyEnv); v != "" {
-			return v, nil
+			return v, "env", nil
 		}
 	}
 	if cfg.APIKeyEnv != "" {
 		v := os.Getenv(cfg.APIKeyEnv)
 		if v == "" {
-			return "", fmt.Errorf("api_key_env names %q but that variable is empty or unset", cfg.APIKeyEnv)
+			return "", "", fmt.Errorf("api_key_env names %q but that variable is empty or unset", cfg.APIKeyEnv)
 		}
-		return v, nil
+		return v, "api_key_env", nil
 	}
 	if cfg.APIKey != "" {
-		plaintextWarnOnce.Do(func() {
-			fmt.Fprintf(os.Stderr, "nudge: warning: plaintext api_key in %s — prefer the %s env var or api_key_env\n", config.Path(), keyEnv)
-			if runtime.GOOS != "windows" {
-				_ = os.Chmod(config.Path(), 0o600)
-			}
-		})
-		return cfg.APIKey, nil
+		// A key in the config file is a supported place (`nudge setup`
+		// stores pasted keys there) — keep the file private on platforms
+		// where the mode means something.
+		if runtime.GOOS != "windows" {
+			_ = os.Chmod(config.Path(), 0o600)
+		}
+		return cfg.APIKey, "config file", nil
 	}
-	return "", nil
+	return "", "", nil
 }
