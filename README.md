@@ -642,3 +642,7 @@ run `make build-all VERSION=v0.1.0` on Unix-like systems or
 See `DESIGN.md` for the two-tier architecture, the no-configuration
 principle, safety validation, and shell-integration tradeoffs. Scoop and
 Homebrew packaging are future work.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
