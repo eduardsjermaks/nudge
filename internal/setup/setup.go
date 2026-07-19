@@ -40,6 +40,8 @@ func Run() int {
 		if !chooseBrain() {
 			return 1
 		}
+	} else if !confirmBrain() {
+		return 1
 	}
 
 	cfg, err := config.Load()
@@ -90,11 +92,36 @@ func chooseBrain() bool {
 	case "", "1":
 		return cloudSetup()
 	case "2":
-		return true
+		// Written out even though ollama is the built-in default, so a
+		// switch away from a cloud provider actually takes effect.
+		return writeConfigLines([]string{`provider = "ollama"`})
 	default:
 		ui.Errf("unrecognized choice %q\n", ans)
 		return false
 	}
+}
+
+// confirmBrain runs when a config already exists: re-running setup is also
+// how the provider gets switched — there is no separate reconfigure command
+// — so show what is active and offer the choice again.
+func confirmBrain() bool {
+	cfg, err := config.Load()
+	if err != nil {
+		return true // the main Load in Run reports the error
+	}
+	name := cfg.Provider
+	if name == "" {
+		name = "ollama"
+	}
+	keep, err := ui.AskYesNo(fmt.Sprintf("Current provider: %s. Keep it?", ui.Bold(name)), true)
+	if err != nil {
+		return false
+	}
+	if keep {
+		return true
+	}
+	ui.Errf("  (choosing again rewrites %s — custom settings in it are lost)\n", config.Path())
+	return chooseBrain()
 }
 
 // cloudProviders maps each provider to its standard credential env var and
@@ -157,16 +184,9 @@ func cloudSetup() bool {
 		}
 	}
 
-	path := config.Path()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		ui.Errf("cannot create %s: %v\n", filepath.Dir(path), err)
+	if !writeConfigLines(lines) {
 		return false
 	}
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
-		ui.Errf("cannot write %s: %v\n", path, err)
-		return false
-	}
-	ui.Errf("  %s wrote %s\n", ui.Cyan("ok"), path)
 
 	switch {
 	case keyStored:
@@ -182,6 +202,22 @@ func cloudSetup() bool {
 			ui.Errf("    export %s='<your key>'   # add to your shell rc to persist\n", p.keyEnv)
 		}
 	}
+	return true
+}
+
+// writeConfigLines replaces config.toml with the given lines. 0600 because
+// the file may hold an API key.
+func writeConfigLines(lines []string) bool {
+	path := config.Path()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		ui.Errf("cannot create %s: %v\n", filepath.Dir(path), err)
+		return false
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		ui.Errf("cannot write %s: %v\n", path, err)
+		return false
+	}
+	ui.Errf("  %s wrote %s\n", ui.Cyan("ok"), path)
 	return true
 }
 

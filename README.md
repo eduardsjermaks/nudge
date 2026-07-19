@@ -73,7 +73,10 @@ provider — linking to the provider's key page and storing a pasted API key
 privately in the config file — (or installs and starts Ollama and pulls the
 model, if you prefer local), adds the shell integration, and finishes with
 `nudge doctor`. Every
-change asks for confirmation first, and it is safe to re-run any time. If it
+change asks for confirmation first, and it is safe to re-run any time: each
+step detects "already done", so a re-run doubles as repair (and often
+completes what a first run left pending). Re-running is also how you switch
+providers — setup shows the current one and asks whether to keep it. If it
 ends with "all good." you are done — the rest of this section is the manual
 equivalent.
 
