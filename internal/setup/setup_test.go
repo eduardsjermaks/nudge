@@ -57,6 +57,27 @@ func TestOllamaCandidates(t *testing.T) {
 	}
 }
 
+func TestSetConfigKey(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "config.toml")
+	os.WriteFile(p, []byte("provider = \"anthropic\"\nmodel = \"claude-haiku-4-5\"\napi_key = \"old\"\napi_key_env = \"MY_VAR\"\n"), 0o644)
+	if err := setConfigKey(p, "new-key"); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(p)
+	s := string(b)
+	for _, want := range []string{`provider = "anthropic"`, `model = "claude-haiku-4-5"`, `api_key_env = "MY_VAR"`, `api_key = "new-key"`} {
+		if !strings.Contains(s, want) {
+			t.Errorf("missing %q in:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, `"old"`) {
+		t.Errorf("old key survived:\n%s", s)
+	}
+	if strings.Count(s, "api_key =") != 1 {
+		t.Errorf("api_key line not unique:\n%s", s)
+	}
+}
+
 func TestPortBusy(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

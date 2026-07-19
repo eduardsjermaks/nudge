@@ -118,6 +118,7 @@ func confirmBrain() bool {
 		return false
 	}
 	if keep {
+		maybeUpdateKey(cfg)
 		return true
 	}
 	ui.Errf("  (choosing again rewrites %s — custom settings in it are lost)\n", config.Path())
@@ -203,6 +204,65 @@ func cloudSetup() bool {
 		}
 	}
 	return true
+}
+
+// maybeUpdateKey lets a re-run change the credential for a kept cloud
+// provider — without this, setup could store a key once but never fix a
+// wrong or rotated one.
+func maybeUpdateKey(cfg config.Config) {
+	p, ok := cloudProviders[cfg.Provider]
+	if !ok {
+		return
+	}
+	change, err := ui.AskYesNo("Change the API key?", false)
+	if err != nil || !change {
+		return
+	}
+	if os.Getenv(p.keyEnv) != "" {
+		ui.Errf("  the active key comes from the %s environment variable, which\n", ui.Bold(p.keyEnv))
+		ui.Errf("  nudge cannot change. Update it there:\n")
+		if runtime.GOOS == "windows" {
+			ui.Errf("    [Environment]::SetEnvironmentVariable('%s', '<new key>', 'User')\n", p.keyEnv)
+			ui.Errf("    (then open a new terminal)\n")
+		} else {
+			ui.Errf("    export %s='<new key>'   # update your shell rc\n", p.keyEnv)
+		}
+		return
+	}
+	ui.Errf("  Create or copy a key: %s\n", ui.Bold(p.portal))
+	key, err := ui.Ask("New API key (Enter = cancel):")
+	if err != nil {
+		return
+	}
+	if key = strings.TrimSpace(key); key == "" {
+		ui.Errf("  unchanged.\n")
+		return
+	}
+	if err := setConfigKey(config.Path(), key); err != nil {
+		ui.Errf("  cannot update %s: %v\n", config.Path(), err)
+		return
+	}
+	ui.Errf("  %s API key updated\n", ui.Cyan("ok"))
+}
+
+// setConfigKey replaces (or adds) the api_key line in config.toml, leaving
+// every other setting untouched.
+func setConfigKey(path, key string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	var out []string
+	for _, line := range strings.Split(strings.TrimRight(string(b), "\n"), "\n") {
+		t := strings.TrimSpace(line)
+		// exact key only — "api_key_env" must survive
+		if strings.HasPrefix(t, "api_key ") || strings.HasPrefix(t, "api_key=") {
+			continue
+		}
+		out = append(out, line)
+	}
+	out = append(out, fmt.Sprintf("api_key = %q", key))
+	return os.WriteFile(path, []byte(strings.Join(out, "\n")+"\n"), 0o600)
 }
 
 // writeConfigLines replaces config.toml with the given lines. 0600 because
