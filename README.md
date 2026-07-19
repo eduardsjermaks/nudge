@@ -53,8 +53,7 @@ and `prune`.
 `just create dir mynewproj and init repo there` becomes
 `mkdir mynewproj; cd mynewproj; git init`. Note the prompt afterwards: it is
 now inside `mynewproj`. Because the suggestion runs through the shell wrapper
-rather than a child process, the `cd` persists — the same reason `venv`
-activation and `mkdir x && cd x` work.
+rather than a child process, the `cd` persists — the same reason `mkdir x && cd x` work.
 
 ## How it works
 
