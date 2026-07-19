@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -217,9 +219,10 @@ func serveLogPath() string {
 	return filepath.Join(os.TempDir(), "nudge-ollama-serve.log")
 }
 
-// showServerLog prints the tail of the freshest server log after a failed
-// start, so the user sees the actual error instead of just "did not come
-// up". The desktop app writes its own logs under %LOCALAPPDATA%\Ollama.
+// showServerLog prints the tail of every server log it can find after a
+// failed start, so the user sees the actual error instead of just "did not
+// come up". All of them, not just the freshest: the desktop app's app.log
+// only records "ollama exited" — the reason lives in server.log.
 func showServerLog() {
 	candidates := []string{serveLogPath()}
 	if runtime.GOOS == "windows" {
@@ -229,24 +232,36 @@ func showServerLog() {
 				filepath.Join(lad, "Ollama", "app.log"))
 		}
 	}
-	var best string
-	var bestT time.Time
 	for _, p := range candidates {
-		if st, err := os.Stat(p); err == nil && st.Size() > 0 && st.ModTime().After(bestT) {
-			best, bestT = p, st.ModTime()
+		if st, err := os.Stat(p); err != nil || st.Size() == 0 {
+			continue
+		}
+		lines := tailLines(p, 8)
+		if len(lines) == 0 {
+			continue
+		}
+		ui.Errf("  last lines of %s:\n", p)
+		for _, l := range lines {
+			ui.Errf("    %s\n", l)
 		}
 	}
-	if best == "" {
-		return
+}
+
+// portBusy reports whether something accepts TCP connections on the
+// endpoint even though the API never answered — the signature of a stuck
+// earlier server holding the port, which makes every new one exit
+// immediately at bind time.
+func portBusy(endpoint string) bool {
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Host == "" {
+		return false
 	}
-	lines := tailLines(best, 10)
-	if len(lines) == 0 {
-		return
+	c, err := net.DialTimeout("tcp", u.Host, 2*time.Second)
+	if err != nil {
+		return false
 	}
-	ui.Errf("  the server's last words (%s):\n", best)
-	for _, l := range lines {
-		ui.Errf("    %s\n", l)
-	}
+	c.Close()
+	return true
 }
 
 // tailLines returns up to n trailing lines of a file, reading at most the
@@ -323,6 +338,15 @@ func waitUp(endpoint string, max time.Duration) bool {
 	sp.Stop()
 	ui.Errf("  the server did not come up within %s\n", max)
 	showServerLog()
+	if portBusy(endpoint) {
+		ui.Errf("  something is listening on %s but not answering the API —\n", endpoint)
+		ui.Errf("  a stuck ollama process is probably holding the port. Stop them all and retry:\n")
+		if runtime.GOOS == "windows" {
+			ui.Errf("    Get-Process *ollama* | Stop-Process -Force   (or reboot)\n")
+		} else {
+			ui.Errf("    pkill -f ollama   (or reboot)\n")
+		}
+	}
 	return false
 }
 

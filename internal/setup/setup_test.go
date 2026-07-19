@@ -3,6 +3,7 @@ package setup
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -53,6 +54,23 @@ func TestOllamaCandidates(t *testing.T) {
 				t.Errorf("%s candidate %q does not end in /ollama", goos, c)
 			}
 		}
+	}
+}
+
+func TestPortBusy(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	if !portBusy("http://" + ln.Addr().String()) {
+		t.Error("open listener must count as busy")
+	}
+	if portBusy("http://127.0.0.1:1") {
+		t.Error("closed port must not count as busy")
+	}
+	if portBusy(":::not-a-url") {
+		t.Error("garbage endpoint must not count as busy")
 	}
 }
 
