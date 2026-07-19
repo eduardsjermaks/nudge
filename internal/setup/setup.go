@@ -61,6 +61,11 @@ func Run() int {
 	ui.Errf("\nchecking the result (%s):\n", ui.Bold("nudge doctor"))
 	code := doctor.Run()
 
+	if code != 0 {
+		ui.Errf("\nNot everything is ready — run %s again: it is safe to re-run and\n", ui.Bold("nudge setup"))
+		ui.Errf("often completes on the second pass (a server or download started in the\n")
+		ui.Errf("background may just have needed more time than the wizard waited).\n")
+	}
 	if reload != "" {
 		ui.Errf("\n%s the shell hook was added to your profile, but this session\n", ui.Bold("one last step:"))
 		ui.Errf("started without it — misspelled commands won't be caught here yet. Run:\n")
