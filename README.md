@@ -35,9 +35,18 @@ history and proposes `dotnet tool install --global dotnet-ef`. This class of
 mistake is the reason `fix` exists, and `dotnet-ef --version` afterwards
 confirms the tool actually landed.
 
-### 4. Destructive suggestions demand a typed `y`
+### 4. Intent mode, including suggestions that change shell state
 
-![plain-English uninstall request flagged as destructive before running](gifs/4-tier2-general-text-destructive-fix.gif)
+![plain-English request expanded into mkdir, cd and git init](gifs/4-tier2-general-text.gif)
+
+`just create dir mynewproj and init repo there` becomes
+`mkdir mynewproj; cd mynewproj; git init`. Note the prompt afterwards: it is
+now inside `mynewproj`. Because the suggestion runs through the shell wrapper
+rather than a child process, the `cd` persists — the same reason `mkdir x && cd x` work.
+
+### 5. Destructive suggestions demand a typed `y`
+
+![plain-English uninstall request flagged as destructive before running](gifs/5-tier2-general-text-destructive-fix.gif)
 
 Plain words rather than a command: `and uninstall dotnet-ef globally`. nudge
 resolves it to `dotnet tool uninstall --global dotnet-ef`, then refuses to
@@ -45,15 +54,6 @@ accept a bare Enter — the model flagged the suggestion as destructive, so the
 prompt changes to `[y = yes / Enter or n = no / e = edit]` and waits for an
 explicit `y`. The same guard covers `rm -rf`, `git reset --hard`, force-push,
 and `prune`.
-
-### 5. Intent mode, including suggestions that change shell state
-
-![plain-English request expanded into mkdir, cd and git init](gifs/5-tier2-general-text.gif)
-
-`just create dir mynewproj and init repo there` becomes
-`mkdir mynewproj; cd mynewproj; git init`. Note the prompt afterwards: it is
-now inside `mynewproj`. Because the suggestion runs through the shell wrapper
-rather than a child process, the `cd` persists — the same reason `mkdir x && cd x` work.
 
 ## How it works
 
