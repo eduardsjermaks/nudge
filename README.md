@@ -41,8 +41,10 @@ confirms the tool actually landed.
 
 `just create dir mynewproj and init repo there` becomes
 `mkdir mynewproj; cd mynewproj; git init`. Note the prompt afterwards: it is
-now inside `mynewproj`. Because the suggestion runs through the shell wrapper
-rather than a child process, the `cd` persists — the same reason `mkdir x && cd x` work.
+now inside `mynewproj`. The shell integration installs a `nudge` function that
+shadows the binary, captures what it prints, and evals it in your live shell —
+so the `cd` persists. A child process could not do that, which is the same
+reason `cd` has to be a shell builtin rather than a program on `PATH`.
 
 ### 5. Destructive suggestions demand a typed `y`
 
