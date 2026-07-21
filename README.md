@@ -607,6 +607,21 @@ then `winget uninstall Ollama.Ollama` (Windows), `brew uninstall ollama`
 (Linux). Downloaded models live in `~/.ollama` — delete that too if you want
 the disk space back.
 
+## Related projects
+
+Nudge was partly inspired by [The Fuck](https://github.com/nvbn/thefuck),
+which popularized the workflow of correcting a previously failed shell command.
+
+Other projects, including [AIChat](https://github.com/sigoden/aichat) and
+[ShellGPT](https://github.com/TheR1D/shell_gpt), provide broader
+LLM-assisted command generation and terminal workflows.
+
+Nudge focuses specifically on command recovery: it fixes clear executable and
+subcommand typos using candidates derived from the local `PATH` and CLI help
+output, then uses a local or cloud LLM for semantic corrections and
+natural-language requests. Its shell integration can also invoke correction
+automatically when an unknown command is entered.
+
 ## Development
 
 ```
