@@ -5,19 +5,9 @@ Use a cloud provider (recommended — best quality, no local install), or run a
 local model when privacy or cost matters more. See
 [Choosing a brain](#choosing-a-brain).
 
-### 1. Tier 1 — typo fixed instantly, no model involved
+### 1. An unknown binary is caught automatically
 
-![git pshu corrected to git push by the Tier-1 matcher](gifs/1-tier1-commands.gif)
-
-`git pshu` fails, and `fix` proposes `git push` — labelled `(typo fix for
-'git pshu')` so you can see no model was consulted. This is the sub-10 ms
-path: the matcher is built from your own `PATH` and `git --help`, so it costs
-nothing and works offline on any provider. Enter runs it and the push goes
-through.
-
-### 2. An unknown binary is caught automatically
-
-![printenv caught automatically and corrected to Get-ChildItem env:](gifs/2-tier2-commands-wrong-command-autofix.gif)
+![printenv caught automatically and corrected to Get-ChildItem env:](gifs/1-tier2-commands-wrong-command-autofix.gif)
 
 Typing `printenv` — muscle memory from Linux — on Windows. Nothing is typed
 after it: the shell's command-not-found hook fires nudge on its own, which
@@ -25,9 +15,9 @@ thinks for a moment and answers with the PowerShell equivalent,
 `Get-ChildItem env:`. The hook only fires when the *binary* doesn't exist,
 which is exactly this case.
 
-### 3. A real binary, a wrong subcommand
+### 2. A real binary, a wrong subcommand
 
-![dotnet install dotnet-ef corrected to dotnet tool install --global](gifs/3-tier2-commands-fix.gif)
+![dotnet install dotnet-ef corrected to dotnet tool install --global](gifs/2-tier2-commands-fix.gif)
 
 `dotnet install dotnet-ef` — the binary exists, so no hook fires; it just
 exits non-zero. Typing `fix` reads the failed command and its exit code from
@@ -35,9 +25,9 @@ history and proposes `dotnet tool install --global dotnet-ef`. This class of
 mistake is the reason `fix` exists, and `dotnet-ef --version` afterwards
 confirms the tool actually landed.
 
-### 4. Intent mode, including suggestions that change shell state
+### 3. Intent mode, including suggestions that change shell state
 
-![plain-English request expanded into mkdir, cd and git init](gifs/4-tier2-general-text.gif)
+![plain-English request expanded into mkdir, cd and git init](gifs/3-tier2-general-text.gif)
 
 `just create dir mynewproj and init repo there` becomes
 `mkdir mynewproj; cd mynewproj; git init`. Note the prompt afterwards: it is
@@ -46,9 +36,9 @@ shadows the binary, captures what it prints, and evals it in your live shell —
 so the `cd` persists. A child process could not do that, which is the same
 reason `cd` has to be a shell builtin rather than a program on `PATH`.
 
-### 5. Destructive suggestions demand a typed `y`
+### 4. Destructive suggestions demand a typed `y`
 
-![plain-English uninstall request flagged as destructive before running](gifs/5-tier2-general-text-destructive-fix.gif)
+![plain-English uninstall request flagged as destructive before running](gifs/4-tier2-general-text-destructive-fix.gif)
 
 Plain words rather than a command: `and uninstall dotnet-ef globally`. nudge
 resolves it to `dotnet tool uninstall --global dotnet-ef`, then refuses to
@@ -56,6 +46,16 @@ accept a bare Enter — the model flagged the suggestion as destructive, so the
 prompt changes to `[y = yes / Enter or n = no / e = edit]` and waits for an
 explicit `y`. The same guard covers `rm -rf`, `git reset --hard`, force-push,
 and `prune`.
+
+### 5. Tier 1 — typo fixed instantly, no model involved
+
+![git pshu corrected to git push by the Tier-1 matcher](gifs/5-tier1-commands.gif)
+
+`git pshu` fails, and `fix` proposes `git push` — labelled `(typo fix for
+'git pshu')` so you can see no model was consulted. This is the sub-10 ms
+path: the matcher is built from your own `PATH` and `git --help`, so it costs
+nothing and works offline on any provider. Enter runs it and the push goes
+through.
 
 ## How it works
 
